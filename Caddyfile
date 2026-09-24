@@ -1,0 +1,40 @@
+# Caddyfile propio para Railway (Railpack lo usa en lugar del suyo).
+# Motivo: el Caddyfile por defecto de Railpack envía una
+# Content-Security-Policy que bloquea las URL "blob:", y el widget de
+# D-ID las necesita para el video y el audio del agente.
+{
+	admin off
+	persist_config off
+	auto_https off
+	log {
+		format json
+	}
+	servers {
+		trusted_proxies static private_ranges 100.0.0.0/8
+	}
+}
+
+:{$PORT:80} {
+	log {
+		format json
+	}
+
+	respond /health 200
+
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+		# Sin Content-Security-Policy a propósito (ver nota arriba).
+	}
+
+	root * .
+
+	file_server {
+		hide .git .env* Caddyfile .gitignore
+	}
+
+	encode gzip zstd
+
+	try_files {path} {path}.html {path}/index.html
+}
