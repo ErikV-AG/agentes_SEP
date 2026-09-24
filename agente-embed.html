@@ -390,6 +390,19 @@
                 'this usually takes a few seconds':
                   'Esto suele tardar unos segundos',
 
+                /* Sala de espera: aparece cuando D-ID no tiene una sesión
+                   libre (todas las conversaciones simultáneas del plan
+                   están ocupadas). Frase completa y mitades por separado. */
+                'looking for agent':             'Buscando al agente',
+                "finding an available agent for you. this won't take long.":
+                  'Estamos buscando un agente disponible. No tardará mucho.',
+                'finding an available agent for you.':
+                  'Estamos buscando un agente disponible.',
+                'finding an available agent for you':
+                  'Estamos buscando un agente disponible',
+                "this won't take long.":         'No tardará mucho.',
+                "this won't take long":          'No tardará mucho',
+
                 'hang tight':                    'Un momento',
                 'reconnect':                     'Reconectar',
                 'continue call...':              'Continuar conversación...',
@@ -482,6 +495,7 @@
             /* Normaliza antes de buscar. Tres cosas importan:
                - el carácter … y los tres puntos ... son intercambiables en
                  el bundle de D-ID, y no siempre usa el mismo;
+               - lo mismo con el apóstrofo tipográfico ’ y el recto ';
                - un salto de línea o doble espacio en el markup no debe
                  impedir el match;
                - la búsqueda es en minúsculas.
@@ -489,6 +503,7 @@
             function normalizar(txt) {
                 return txt
                     .replace(/\u2026/g, '...')
+                    .replace(/[\u2018\u2019\u02bc]/g, "'")   // won’t → won't
                     .replace(/\s+/g, ' ')
                     .trim()
                     .toLowerCase();
@@ -757,11 +772,33 @@
             /* ==============================================================
                Cierre limpio al salir de la página
             ============================================================== */
-            window.addEventListener('beforeunload', () => {
+            /* Cerrar la sesión de D-ID al salir. Si la sesión queda
+               abierta, sigue ocupando un lugar del plan hasta que D-ID
+               la expira, y el siguiente visitante cae en la sala de
+               espera ("Buscando al agente"). */
+            function cerrarSesion() {
                 clearInterval(traduccionInterval);
-                const a = document.querySelector('did-agent');
-                if (a && a.disconnect) a.disconnect();
-            });
+                const candidatos = [
+                    document.querySelector('did-agent'),
+                    window['did-agent'],
+                    ...container.querySelectorAll('*'),
+                ];
+                for (const a of candidatos) {
+                    if (!a) continue;
+                    for (const m of ['disconnect', 'destroy', 'close']) {
+                        try { if (typeof a[m] === 'function') a[m](); } catch (e) {}
+                    }
+                }
+                document.querySelectorAll('video').forEach(v => {
+                    try {
+                        const st = v.srcObject;
+                        if (st && st.getTracks) st.getTracks().forEach(t => t.stop());
+                    } catch (e) {}
+                });
+            }
+            window.addEventListener('pagehide', cerrarSesion);
+            window.addEventListener('beforeunload', cerrarSesion);
+            backBtn.addEventListener('click', cerrarSesion);
 
             /* ==============================================================
                Inyectar el script de D-ID
