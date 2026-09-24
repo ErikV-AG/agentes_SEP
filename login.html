@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Person-AG — Acceso</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Noto+Serif:wght@600;700&display=swap" rel="stylesheet">
+    <style>
+        @font-face {
+            font-family: 'Patria';
+            src: local('Patria Bold'), url('static/fonts/Patria-Bold.woff2') format('woff2');
+            font-weight: 700; font-display: swap;
+        }
+
+        /* Paleta institucional Gobierno de México 2024-2030 */
+        :root {
+            --guinda:        #9b2247;
+            --guinda-oscuro: #611232;
+            --verde:         #1e5b4f;
+            --dorado:        #a57f2c;
+            --negro:         #161a1d;
+            --gris:          #98989a;
+            --gris-texto:    #545454;
+            --linea:         #d9d5cc;
+            --fondo:         #ffffff;
+            --fondo-suave:   #f6f5f2;
+            --error:         #b3261e;
+
+            --f-titulo: 'Patria', 'Noto Serif', Georgia, serif;
+            --f-texto:  'Noto Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: var(--f-texto);
+            background: var(--fondo-suave);
+            color: var(--negro);
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Barra superior guinda con pleca dorada (igual que el index) */
+        .barra {
+            background: var(--guinda-oscuro);
+            border-bottom: 3px solid var(--dorado);
+            padding-top: env(safe-area-inset-top, 0px);
+        }
+        .barra-inner {
+            max-width: 1120px;
+            margin: 0 auto;
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            color: #fff;
+        }
+        .barra-logo { height: 32px; width: auto; display: block; }
+        .barra-nombre {
+            font-family: var(--f-titulo);
+            font-size: 1.125rem;
+            font-weight: 700;
+        }
+
+        main {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+
+        .login-card {
+            width: 100%;
+            max-width: 400px;
+            background: var(--fondo);
+            border: 1px solid var(--linea);
+            border-top: 5px solid var(--guinda);
+            border-radius: 4px;
+            padding: 40px 36px 32px;
+            box-shadow: 0 12px 32px -18px rgba(97, 18, 50, 0.3);
+        }
+
+        .login-title { margin-bottom: 28px; }
+        .login-title h1 {
+            font-family: var(--f-titulo);
+            font-weight: 700;
+            font-size: 2rem;
+            line-height: 1.15;
+            color: var(--guinda-oscuro);
+            margin-bottom: 8px;
+        }
+        .login-title p { font-size: 0.9375rem; color: var(--gris-texto); line-height: 1.5; }
+
+        .code-label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--negro);
+            margin-bottom: 10px;
+        }
+
+        .code-inputs { display: flex; gap: 12px; }
+
+        .code-inputs input {
+            width: 56px;
+            height: 64px;
+            text-align: center;
+            font-size: 1.75rem;
+            font-weight: 600;
+            font-family: var(--f-texto);
+            background: var(--fondo);
+            border: 1.5px solid var(--linea);
+            border-radius: 4px;
+            color: var(--negro);
+            outline: none;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+            caret-color: transparent;
+        }
+        .code-inputs input:focus {
+            border-color: var(--guinda);
+            box-shadow: 0 0 0 3px rgba(165, 127, 44, 0.35);
+        }
+        .code-inputs input.error {
+            border-color: var(--error);
+            background: #fdf3f2;
+            animation: shake 0.3s ease;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25%      { transform: translateX(-6px); }
+            75%      { transform: translateX(6px); }
+        }
+
+        .error-msg {
+            color: var(--error);
+            font-size: 0.875rem;
+            min-height: 1.4em;
+            margin: 10px 0 14px;
+        }
+
+        .btn-ingresar {
+            width: 100%;
+            padding: 14px;
+            background: var(--guinda-oscuro);
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            font-weight: 600;
+            font-family: var(--f-texto);
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+        .btn-ingresar:hover:not(:disabled) { background: var(--guinda); }
+        .btn-ingresar:focus-visible { outline: 3px solid var(--dorado); outline-offset: 2px; }
+        .btn-ingresar:disabled {
+            background: #e7e4de;
+            color: var(--gris);
+            cursor: not-allowed;
+        }
+
+        .pie {
+            background: var(--guinda-oscuro);
+            color: rgba(255,255,255,.8);
+            font-size: 0.8125rem;
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+        }
+        .pie-inner {
+            max-width: 1120px;
+            margin: 0 auto;
+            padding: 18px 24px;
+        }
+
+        @media (max-width: 420px) {
+            .login-card { padding: 32px 22px 26px; }
+            .login-title h1 { font-size: 1.75rem; }
+            .code-inputs { gap: 10px; }
+            .code-inputs input { width: 100%; max-width: 60px; height: 60px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            * { transition: none !important; animation: none !important; }
+        }
+    </style>
+</head>
+<body>
+
+<header class="barra">
+    <div class="barra-inner">
+        <img src="static/images/LOGO-AG-GRUESO.png" alt="" class="barra-logo" onerror="this.remove()">
+        <span class="barra-nombre">Person-AG</span>
+    </div>
+</header>
+
+<main>
+    <div class="login-card">
+        <div class="login-title">
+            <h1>Bienvenida, bienvenido</h1>
+            <p>Escribe tu código de acceso de cuatro dígitos para conversar con los agentes.</p>
+        </div>
+
+        <span class="code-label" id="codeLabel">Código de acceso</span>
+        <div class="code-inputs" id="codeInputs" role="group" aria-labelledby="codeLabel">
+            <input type="password" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" aria-label="Dígito 1">
+            <input type="password" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" aria-label="Dígito 2">
+            <input type="password" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" aria-label="Dígito 3">
+            <input type="password" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" aria-label="Dígito 4">
+        </div>
+        <p class="error-msg" id="errorMsg" role="alert"></p>
+        <button class="btn-ingresar" id="btnIngresar" type="button" disabled>Ingresar</button>
+    </div>
+</main>
+
+<footer class="pie">
+    <div class="pie-inner">Academia Global © 2026</div>
+</footer>
+
+<script>
+    const VALID_CODES = ['1234', '5678', '9999'];
+
+    const inputs   = Array.from(document.querySelectorAll('.code-inputs input'));
+    const btnEnter = document.getElementById('btnIngresar');
+    const errorMsg = document.getElementById('errorMsg');
+
+    inputs[0].focus();
+
+    inputs.forEach((input, index) => {
+        input.addEventListener('input', () => {
+            input.value = input.value.replace(/[^0-9]/g, '');
+            if (input.value && index < inputs.length - 1) inputs[index + 1].focus();
+            updateButton(); clearError();
+        });
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace' && !input.value && index > 0) {
+                inputs[index - 1].focus(); inputs[index - 1].value = ''; updateButton();
+            }
+            if (e.key === 'Enter') tryLogin();
+        });
+        input.addEventListener('paste', (e) => {
+            e.preventDefault();
+            const pasted = e.clipboardData.getData('text').replace(/[^0-9]/g, '');
+            if (!pasted) return;
+            inputs.forEach((inp, i) => inp.value = pasted[i] || '');
+            inputs[Math.min(pasted.length, inputs.length) - 1].focus();
+            updateButton();
+        });
+    });
+
+    function updateButton() {
+        btnEnter.disabled = inputs.map(i => i.value).join('').length < inputs.length;
+    }
+    function clearError() {
+        errorMsg.textContent = '';
+        inputs.forEach(i => i.classList.remove('error'));
+    }
+    function showError(msg) {
+        errorMsg.textContent = msg;
+        inputs.forEach(i => i.classList.add('error'));
+        setTimeout(() => {
+            inputs.forEach(i => { i.classList.remove('error'); i.value = ''; });
+            inputs[0].focus(); updateButton(); errorMsg.textContent = '';
+        }, 1500);
+    }
+    function tryLogin() {
+        const code = inputs.map(i => i.value).join('');
+        if (code.length < inputs.length) return;
+        if (VALID_CODES.includes(code)) {
+            sessionStorage.setItem('ag_auth', 'true');
+            window.location.href = 'index.html';
+        } else {
+            showError('El código no es válido. Revísalo y escríbelo de nuevo.');
+        }
+    }
+    btnEnter.addEventListener('click', tryLogin);
+    if (sessionStorage.getItem('ag_auth') === 'true') window.location.href = 'index.html';
+</script>
+</body>
+</html>
