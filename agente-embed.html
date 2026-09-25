@@ -403,6 +403,19 @@
                 "this won't take long.":         'No tardará mucho.',
                 "this won't take long":          'No tardará mucho',
 
+                /* Alta demanda: D-ID no tiene sesión disponible (su
+                   capacidad o el límite de sesiones simultáneas del plan). */
+                'high demand':                   'Alta demanda',
+                "we're experiencing unusually high demand right now. please try again in a moment.":
+                  'En este momento hay una demanda inusualmente alta. Inténtalo de nuevo en un momento.',
+                "we're experiencing unusually high demand right now.":
+                  'En este momento hay una demanda inusualmente alta.',
+                "we're experiencing unusually high demand right now":
+                  'En este momento hay una demanda inusualmente alta',
+                'please try again in a moment.': 'Inténtalo de nuevo en un momento.',
+                'please try again in a moment':  'Inténtalo de nuevo en un momento',
+                'try again':                     'Intentar de nuevo',
+
                 'hang tight':                    'Un momento',
                 'reconnect':                     'Reconectar',
                 'continue call...':              'Continuar conversación...',
@@ -670,27 +683,32 @@
             };
 
             /* ==============================================================
-               Auto-click en el botón de inicio
+               Botón de inicio: lo pulsa la persona, no el script
 
-               El texto real del embed v2 es "Start call", no "Start
-               conversation": por eso el auto-click tampoco funcionaba. Se
-               incluye también la versión en español porque la traducción
-               puede ganarle la carrera al click.
+               Antes el script "tocaba" el botón por su cuenta. En celulares
+               eso falla: el navegador solo concede el micrófono (y el audio)
+               de forma confiable cuando la persona toca la pantalla en ese
+               momento. Un toque simulado puede terminar en permiso negado,
+               y el navegador recuerda esa negativa para el sitio.
+               Además, arrancar solo abría una sesión de D-ID con cada visita,
+               aunque nadie fuera a hablar, y eso agota las sesiones
+               simultáneas del plan ("Alta demanda").
 
-               Chrome/Safari pueden bloquear el audio sin gesto del usuario.
-               Si notas que el agente arranca mudo, comenta la línea marcada
-               más abajo y deja que el usuario pulse el botón.
+               Ahora el script solo espera a que aparezca el botón de inicio
+               (ya traducido) y en ese momento muestra el widget para que la
+               persona lo pulse. AUTO_INICIO = true restaura el
+               comportamiento anterior (no recomendado).
             ============================================================== */
+            const AUTO_INICIO = false;
+
             const patronesStart = [
                 'start call',
                 'iniciar conversación',
                 'start conversation',
                 'start a conversation',
                 'start chat',
-                'continue call...',
-                'continuar conversación...',
             ];
-            let yaClickeado = false;
+            let yaClickeado = false;   // "ya encontramos el botón de inicio"
 
             function recolectarRaices(root, acc = []) {
                 acc.push(root);
@@ -715,11 +733,16 @@
                             txt === p || aria === p || txt.startsWith(p) || aria.startsWith(p));
                         if (!hit) continue;
                         yaClickeado = true;
-                        console.log('[agente-embed] auto-click sobre botón de inicio:', txt || aria);
-                        setTimeout(() => {
-                            try { el.click(); }   // ← comenta esta línea para desactivar el auto-click
-                            catch (e) { console.warn('[agente-embed] click falló:', e); }
-                        }, 120);
+                        if (AUTO_INICIO) {
+                            console.log('[agente-embed] auto-inicio:', txt || aria);
+                            setTimeout(() => {
+                                try { el.click(); }
+                                catch (e) { console.warn('[agente-embed] click falló:', e); }
+                            }, 120);
+                        } else {
+                            console.log('[agente-embed] botón de inicio listo, esperando a la persona');
+                            reveal();
+                        }
                         return;
                     }
                 }
