@@ -14,12 +14,52 @@
          Debe ir como script clásico (no module) en el <head>, ANTES de
          cualquier otra cosa que pueda crear shadow DOMs. -->
     <script>
+        /* Modo integrado para SaberesMX (?modo=saberes): sin login, sin
+           botón "Volver" y con la paleta del sitio. Se marca aquí, antes de
+           pintar, para que no se vea ni un instante el estilo por defecto. */
+        if (new URLSearchParams(location.search).get('modo') === 'saberes') {
+            document.documentElement.classList.add('modo-saberes');
+        }
+    </script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500&family=Archivo:wght@400;500;600&display=swap">
+    <script>
         (function () {
+            /* Relleno de pantalla en monitores anchos.
+               El video del avatar tiene la proporción de la imagen original
+               (~16:9). En pantallas más anchas, D-ID rellena los lados con
+               una copia desenfocada. Con este estilo, en pantallas
+               horizontales más anchas que 16:9 el video cubre todo el ancho
+               (recorta un poco arriba y abajo, protegiendo la cabeza).
+               En celulares y pantallas verticales no se toca nada.
+               Para desactivarlo: RELLENAR_ANCHO = false. */
+            const RELLENAR_ANCHO = true;
+            const CSS_RELLENO = `
+                @media (orientation: landscape) and (min-aspect-ratio: 17/9) {
+                    video {
+                        object-fit: cover !important;
+                        object-position: center 25% !important;
+                    }
+                }`;
+
             const orig = Element.prototype.attachShadow;
             Element.prototype.attachShadow = function (init) {
                 const opts = Object.assign({}, init, { mode: 'open' });
-                return orig.call(this, opts);
+                const root = orig.call(this, opts);
+                if (RELLENAR_ANCHO) {
+                    try {
+                        const st = document.createElement('style');
+                        st.textContent = CSS_RELLENO;
+                        root.appendChild(st);
+                    } catch (e) {}
+                }
+                return root;
             };
+            // Por si el video no vive en un shadow DOM
+            if (RELLENAR_ANCHO) {
+                const st = document.createElement('style');
+                st.textContent = CSS_RELLENO;
+                document.head.appendChild(st);
+            }
         })();
     </script>
 
@@ -235,6 +275,38 @@
             .progreso::after { animation-duration: 3s; }
             * { transition: none !important; }
         }
+
+        /* ── Modo SaberesMX ─────────────────────────────────────────── */
+        .modo-saberes {
+            --tono:  #ff4f1f;           /* spray */
+            --f-titulo: 'DM Serif Display', Georgia, serif;
+            --f-texto:  'Archivo', 'Helvetica Neue', sans-serif;
+        }
+        /* Fondo transparente: dentro del marco de SaberesMX se ve el GIF
+           en reposo del personaje mientras el agente conecta */
+        html.modo-saberes,
+        .modo-saberes body { background: transparent; color: #f5ede0; }
+        .modo-saberes .loader {
+            background: linear-gradient(to top, rgba(10,8,7,.82) 0%, rgba(10,8,7,.35) 45%, transparent 75%);
+            justify-content: flex-end;
+            padding-bottom: 36px;
+            gap: 12px;
+        }
+        .modo-saberes #loaderName { font-size: clamp(1.5rem, 6vw, 2rem); text-shadow: 0 2px 12px rgba(0,0,0,.5); }
+        .modo-saberes .error-msg { background: #6b1a2e; color: #f5ede0; }
+        .modo-saberes .pleca,
+        .modo-saberes .back-btn { display: none !important; }
+        .modo-saberes #loaderName { color: #f5ede0; font-weight: 400; }
+        .modo-saberes .progreso { background: rgba(245,237,224,.2); }
+        .modo-saberes #loaderText { color: rgba(245,237,224,.7); }
+        .modo-saberes #loaderSubtext {
+            color: rgba(245,237,224,.45);
+            font-family: 'JetBrains Mono', ui-monospace, monospace;
+            letter-spacing: .12em; text-transform: uppercase; font-size: 10px;
+        }
+        .modo-saberes .error-msg h2 { color: #f5ede0; font-weight: 400; }
+        .modo-saberes .error-msg p  { color: rgba(245,237,224,.7); }
+        .modo-saberes .error-msg a  { display: none; }
     </style>
 </head>
 <body>
@@ -287,8 +359,9 @@
             },
         };
 
-        // Auth check
-        if (sessionStorage.getItem('ag_auth') !== 'true') {
+        // Auth check (el modo SaberesMX no pide código: el sitio es la entrada)
+        const MODO_SABERES = document.documentElement.classList.contains('modo-saberes');
+        if (!MODO_SABERES && sessionStorage.getItem('ag_auth') !== 'true') {
             window.location.href = 'login.html';
         }
 
@@ -303,11 +376,14 @@
             const errorEl     = document.getElementById('errorMsg');
             const errorDt     = document.getElementById('errorDetail');
             const backBtn     = document.querySelector('.back-btn');
+            if (MODO_SABERES) {
+                document.getElementById('loaderSubtext').textContent = 'Habla con la historia · SaberesMX';
+            }
             const loaderName  = document.getElementById('loaderName');
 
             // Color institucional de cada agente (igual que en el selector)
             const TONOS = { benito: '--guinda', leona: '--verde', rosario: '--dorado' };
-            if (TONOS[agentKey]) {
+            if (TONOS[agentKey] && !MODO_SABERES) {   // en SaberesMX se queda el naranja del sitio
                 document.documentElement.style.setProperty('--tono', `var(${TONOS[agentKey]})`);
             }
 
