@@ -78,6 +78,7 @@
             --guinda:        #9b2247;
             --guinda-oscuro: #611232;
             --verde:         #1e5b4f;
+            --verde-oscuro:  #002f2a;
             --dorado:        #a57f2c;
             --dorado-claro:  #e6d194;
             --negro:         #161a1d;
@@ -367,6 +368,16 @@
                 did_agent_id:   'v2_agt_sLdfDODM',
                 did_client_key: 'ck_Up9xEjc4YkczGXrCM7ZaK',
             },
+            elvia: {
+                name:           'Elvia Carrillo Puerto',
+                did_agent_id:   'v2_agt_lhTXfbPP',
+                did_client_key: 'ck_WDQ2iW9SIMliODy9514gF',
+            },
+            rita: {
+                name:           'Rita Cetina Gutiérrez',
+                did_agent_id:   'v2_agt_j-C0ZqjA',
+                did_client_key: 'ck_3Cw2SHGxtjeUCCdm46rgR',
+            },
         };
 
         // Auth check (el modo SaberesMX no pide código: el sitio es la entrada)
@@ -392,7 +403,7 @@
             const loaderName  = document.getElementById('loaderName');
 
             // Color institucional de cada agente (igual que en el selector)
-            const TONOS = { benito: '--guinda', leona: '--verde', rosario: '--dorado', zaragoza: '--verde-oscuro', hidalgo: '--guinda-oscuro' };
+            const TONOS = { benito: '--guinda', leona: '--verde', rosario: '--dorado', zaragoza: '--verde-oscuro', hidalgo: '--guinda-oscuro', elvia: '--guinda', rita: '--dorado' };
             if (TONOS[agentKey] && !MODO_SABERES) {   // en SaberesMX se queda el naranja del sitio
                 document.documentElement.style.setProperty('--tono', `var(${TONOS[agentKey]})`);
             }
