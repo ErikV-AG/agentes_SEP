@@ -342,7 +342,7 @@
 
         /* ── Botón "Toca para hablar" (micrófono manual, SaberesMX) ─── */
         .mic-manual {
-            position: fixed;                 /* respaldo si aún no se reubica */
+            position: fixed;
             left: 50%;
             bottom: calc(96px + env(safe-area-inset-bottom, 0px));
             transform: translateX(-50%);
@@ -1111,34 +1111,6 @@
 
                 const log = (...a) => console.log('[mic-manual]', ...a);
 
-                /* El widget de D-ID (video + controles) vive dentro de un
-                   shadow DOM cuyo host es un <div> que D-ID encoge al abrir el
-                   panel de chat. Para que el botón se desplace junto con los
-                   controles, lo movemos DENTRO de ese host y lo posicionamos
-                   relativo a él (no a la ventana). Si no se encuentra el host,
-                   el botón se queda con su posición fija de respaldo. */
-                let hostWidget = null, reubicado = false;
-                function buscarHost() {
-                    return [...document.querySelectorAll('*')].find(
-                        el => el.shadowRoot && el.shadowRoot.querySelector('video')) || null;
-                }
-                function reubicarBoton() {
-                    const host = buscarHost();
-                    if (!host) return false;
-                    hostWidget = host;
-                    const cs = getComputedStyle(host);
-                    if (cs.position === 'static') host.style.position = 'relative';
-                    if (btn.parentElement !== host) host.appendChild(btn);
-                    // Anclado al host, justo encima de la barra inferior de D-ID
-                    btn.style.position  = 'absolute';
-                    btn.style.left      = '50%';
-                    btn.style.right     = 'auto';
-                    btn.style.bottom    = 'calc(64px + env(safe-area-inset-bottom, 0px))';
-                    btn.style.transform = 'translateX(-50%)';
-                    reubicado = true;
-                    return true;
-                }
-
                 function silenciar(si) {
                     try { api.functions.toggleMicState(si); }   // true = silenciar
                     catch (e) { log('toggleMicState falló', e); }
@@ -1249,12 +1221,6 @@
                             silenciar(true);   // arranca callado mientras el avatar saluda
                             try { api.configure({ showMicToggle: false }); } catch (e) {}
                             pintar(actividad === 'TALKING' ? 'hablando' : 'listo');
-                            // Reubicar dentro del widget (reintentos: el DOM del
-                            // shadow puede tardar en montar el video)
-                            let intentos = 0;
-                            const tReub = setInterval(() => {
-                                if (reubicarBoton() || ++intentos > 20) clearInterval(tReub);
-                            }, 300);
                         }
                         if (['disconnected', 'disconnecting', 'closed', 'fail'].includes(s)) {
                             conectado = false;
@@ -1293,13 +1259,6 @@
                         log('API de D-ID no disponible: micrófono con el comportamiento original');
                     }
                 }, 200);
-
-                window.addEventListener('resize', () => {
-                    if (reubicado && hostWidget && !hostWidget.isConnected) {
-                        reubicado = false;   // el widget se recreó; volver a buscarlo
-                        reubicarBoton();
-                    }
-                });
 
                 window.addEventListener('pagehide', () => {
                     try { if (pistaClon) pistaClon.stop(); } catch (e) {}
