@@ -37,8 +37,7 @@
         window.MIC_MANUAL = true;
 
         (function () {
-            const activo = window.MIC_MANUAL === true &&
-                document.documentElement.classList.contains('modo-saberes');
+            const activo = window.MIC_MANUAL === true;
             window.__micManual = { activo: activo, stream: null, alNuevoStream: [] };
             if (!activo || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
 
@@ -357,7 +356,7 @@
             border-radius: 999px;
             font: 600 15px/1.2 var(--f-texto);
             color: #fff;
-            background: #ff4f1f;
+            background: var(--tono, #9b2247);
             box-shadow: 0 6px 22px rgba(0, 0, 0, .35);
             cursor: pointer;
             -webkit-tap-highlight-color: transparent;
@@ -377,7 +376,7 @@
         .mic-manual:focus-visible { outline: 3px solid #b08938; outline-offset: 3px; }
         .mic-nivel { display: none; align-items: center; gap: 3px; height: 18px; }
         .mic-manual[data-estado="escuchando"] .mic-nivel { display: inline-flex; }
-        .mic-nivel i { display: block; width: 3px; height: 4px; border-radius: 2px; background: #ff4f1f; transition: height .08s linear; }
+        .mic-nivel i { display: block; width: 3px; height: 4px; border-radius: 2px; background: var(--tono, #9b2247); transition: height .08s linear; }
         @media (prefers-reduced-motion: reduce) { .mic-nivel i { transition: none; } }
         .modo-saberes .pleca,
         .modo-saberes .back-btn { display: none !important; }
@@ -392,6 +391,11 @@
         .modo-saberes .error-msg h2 { color: #f5ede0; font-weight: 400; }
         .modo-saberes .error-msg p  { color: rgba(245,237,224,.7); }
         .modo-saberes .error-msg a  { display: none; }
+        .modo-saberes .mic-manual { background: #ff4f1f; }
+        .modo-saberes .mic-manual[data-estado="escuchando"] { background: #f5ede0; color: #0a0807; }
+        .modo-saberes .mic-manual[data-estado="hablando"],
+        .modo-saberes .mic-manual[data-estado="pensando"] { background: rgba(10,8,7,.72); color: #f5ede0; }
+        .modo-saberes .mic-nivel i { background: #ff4f1f; }
     </style>
 </head>
 <body>
