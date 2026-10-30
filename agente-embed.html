@@ -21,6 +21,51 @@
             document.documentElement.classList.add('modo-saberes');
         }
     </script>
+    <script>
+        /* ==================================================================
+           MICRÓFONO MANUAL (modo SaberesMX)
+
+           La conversación arranca con el micrófono apagado mientras el avatar
+           saluda. El alumno toca "Toca para hablar" para abrirlo y toca de
+           nuevo para terminar. También se cierra solo si el avatar empieza a
+           responder, para no captar su voz por las bocinas. Se pide al
+           navegador supresión de ruido y cancelación de eco.
+
+           Interruptor: MIC_MANUAL = false restaura el micrófono original de
+           D-ID. Fuera de ?modo=saberes no hace nada, aunque esté en true.
+        ================================================================== */
+        window.MIC_MANUAL = true;
+
+        (function () {
+            const activo = window.MIC_MANUAL === true &&
+                document.documentElement.classList.contains('modo-saberes');
+            window.__micManual = { activo: activo, stream: null, alNuevoStream: [] };
+            if (!activo || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+
+            const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+            navigator.mediaDevices.getUserMedia = async function (restricciones) {
+                try {
+                    if (restricciones && restricciones.audio) {
+                        const base = restricciones.audio === true ? {} : restricciones.audio;
+                        restricciones = Object.assign({}, restricciones, {
+                            audio: Object.assign({ autoGainControl: true }, base, {
+                                echoCancellation: true,
+                                noiseSuppression: true,
+                            }),
+                        });
+                    }
+                } catch (e) {}
+                const stream = await original(restricciones);
+                try {
+                    if (stream.getAudioTracks().length) {
+                        window.__micManual.stream = stream;
+                        window.__micManual.alNuevoStream.forEach(fn => { try { fn(stream); } catch (e) {} });
+                    }
+                } catch (e) {}
+                return stream;
+            };
+        })();
+    </script>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500&family=Archivo:wght@400;500;600&display=swap">
     <script>
         (function () {
@@ -295,6 +340,45 @@
         }
         .modo-saberes #loaderName { font-size: clamp(1.5rem, 6vw, 2rem); text-shadow: 0 2px 12px rgba(0,0,0,.5); }
         .modo-saberes .error-msg { background: #6b1a2e; color: #f5ede0; }
+
+        /* ── Botón "Toca para hablar" (micrófono manual, SaberesMX) ─── */
+        .mic-manual {
+            position: fixed;
+            left: 50%;
+            bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+            transform: translateX(-50%);
+            z-index: 25;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            max-width: calc(100% - 32px);
+            padding: 12px 20px 12px 16px;
+            border: 0;
+            border-radius: 999px;
+            font: 600 15px/1.2 var(--f-texto);
+            color: #fff;
+            background: #ff4f1f;
+            box-shadow: 0 6px 22px rgba(0, 0, 0, .35);
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            white-space: nowrap;
+        }
+        .mic-manual.visible { display: inline-flex; }
+        .mic-manual svg { width: 20px; height: 20px; flex: none; }
+        .mic-manual[data-estado="hablando"],
+        .mic-manual[data-estado="pensando"] {
+            background: rgba(10, 8, 7, .72);
+            color: #f5ede0;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+        .mic-manual[data-estado="pensando"] { cursor: default; }
+        .mic-manual[data-estado="escuchando"] { background: #f5ede0; color: #0a0807; }
+        .mic-manual:focus-visible { outline: 3px solid #b08938; outline-offset: 3px; }
+        .mic-nivel { display: none; align-items: center; gap: 3px; height: 18px; }
+        .mic-manual[data-estado="escuchando"] .mic-nivel { display: inline-flex; }
+        .mic-nivel i { display: block; width: 3px; height: 4px; border-radius: 2px; background: #ff4f1f; transition: height .08s linear; }
+        @media (prefers-reduced-motion: reduce) { .mic-nivel i { transition: none; } }
         .modo-saberes .pleca,
         .modo-saberes .back-btn { display: none !important; }
         .modo-saberes #loaderName { color: #f5ede0; font-weight: 400; }
@@ -322,6 +406,12 @@
     </a>
 
     <div id="did-container"></div>
+
+    <button type="button" class="mic-manual" id="micManual" data-estado="oculto">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+        <span class="mic-texto" aria-live="polite">Toca para hablar</span>
+        <span class="mic-nivel" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+    </button>
 
     <div class="loader" id="loader" role="status" aria-live="polite">
         <span id="loaderName"></span>
@@ -989,6 +1079,189 @@
             };
 
             document.head.appendChild(script);
+
+            if (window.__micManual && window.__micManual.activo) {
+                iniciarMicManual(cfg.name || agentKey);
+            }
+
+            /* ==============================================================
+               Micrófono manual: "toca una vez para hablar" y se cierra solo
+               cuando el alumno deja de hablar. Si algo de la API de D-ID no
+               responde, no se toca nada y el widget funciona como siempre.
+            ============================================================== */
+            function iniciarMicManual(nombre) {
+                const btn    = document.getElementById('micManual');
+                const texto  = btn.querySelector('.mic-texto');
+                const barras = Array.from(btn.querySelectorAll('.mic-nivel i'));
+                const primerNombre = String(nombre || '').split(' ')[0];
+
+                const SILENCIO_MS = 1500;      // no se usa: cierre manual
+                const SIN_VOZ_MS  = 8000;      // no se usa: cierre manual
+                const CIERRE_MANUAL = true;    // tocar para hablar / tocar para terminar
+                const MAXIMO_MS   = 25000;  // tope de seguridad
+                const UMBRAL      = 0.02;   // nivel (RMS) que cuenta como voz
+
+                let api = null, estado = 'oculto', conectado = false, actividad = 'IDLE';
+                let ctx = null, analizador = null, fuente = null, pistaClon = null;
+                let temporizador = 0, tInicio = 0, tUltimaVoz = 0, huboVoz = false;
+
+                const log = (...a) => console.log('[mic-manual]', ...a);
+
+                function silenciar(si) {
+                    try { api.functions.toggleMicState(si); }   // true = silenciar
+                    catch (e) { log('toggleMicState falló', e); }
+                }
+
+                function pintar(nuevo) {
+                    estado = nuevo;
+                    btn.dataset.estado = nuevo;
+                    btn.classList.toggle('visible', nuevo !== 'oculto');
+                    const textos = {
+                        listo:      'Toca para hablar',
+                        escuchando: 'Te escucho… toca para terminar',
+                        hablando:   primerNombre ? `Habla ${primerNombre} · toca para interrumpir` : 'Toca para interrumpir',
+                        pensando:   'Pensando…',
+                    };
+                    if (textos[nuevo]) texto.textContent = textos[nuevo];
+                }
+
+                function prepararAnalizador() {
+                    const st = window.__micManual.stream;
+                    if (!st) return false;
+                    try {
+                        if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+                        if (ctx.state === 'suspended') ctx.resume();
+                        if (fuente && fuente.__origen === st) return true;
+                        const pista = st.getAudioTracks()[0];
+                        if (!pista || pista.readyState === 'ended') return false;
+                        if (pistaClon) try { pistaClon.stop(); } catch (e) {}
+                        pistaClon = pista.clone();
+                        pistaClon.enabled = true;   // independiente del silencio de D-ID
+                        fuente = ctx.createMediaStreamSource(new MediaStream([pistaClon]));
+                        fuente.__origen = st;
+                        analizador = ctx.createAnalyser();
+                        analizador.fftSize = 1024;
+                        fuente.connect(analizador);
+                        return true;
+                    } catch (e) {
+                        log('sin detector de silencio; se cerrará por respuesta del agente o por tiempo', e);
+                        analizador = null; fuente = null;
+                        return false;
+                    }
+                }
+
+                function medir() {
+                    const ahora = performance.now();
+                    if (analizador) {
+                        const datos = new Float32Array(analizador.fftSize);
+                        analizador.getFloatTimeDomainData(datos);
+                        let suma = 0;
+                        for (let i = 0; i < datos.length; i++) suma += datos[i] * datos[i];
+                        const rms = Math.sqrt(suma / datos.length);
+                        barras.forEach((b, i) => {
+                            const alto = 4 + Math.min(14, rms * 380 * (0.55 + ((i * 3) % 5) / 8));
+                            b.style.height = alto.toFixed(1) + 'px';
+                        });
+                        if (rms > UMBRAL) { huboVoz = true; tUltimaVoz = ahora; }
+                        if (!CIERRE_MANUAL) {
+                            if (huboVoz && ahora - tUltimaVoz > SILENCIO_MS) return terminarEscucha('silencio');
+                            if (!huboVoz && ahora - tInicio > SIN_VOZ_MS) return terminarEscucha('no habló');
+                        }
+                    }
+                    if (ahora - tInicio > MAXIMO_MS) return terminarEscucha('tiempo máximo');
+                }
+
+                function empezarEscucha() {
+                    prepararAnalizador();
+                    silenciar(false);
+                    pintar('escuchando');
+                    tInicio = tUltimaVoz = performance.now();
+                    huboVoz = false;
+                    clearInterval(temporizador);
+                    temporizador = setInterval(medir, 60);
+                }
+
+                function terminarEscucha(motivo) {
+                    clearInterval(temporizador);
+                    temporizador = 0;
+                    barras.forEach(b => { b.style.height = '4px'; });
+                    silenciar(true);
+                    log('micrófono cerrado:', motivo);
+                    if (!conectado) return pintar('oculto');
+                    pintar(actividad === 'TALKING' ? 'hablando'
+                         : (actividad === 'LOADING' || actividad === 'BUFFERING') ? 'pensando'
+                         : 'listo');
+                }
+
+                btn.addEventListener('click', () => {
+                    if (estado === 'escuchando') return terminarEscucha('toque del alumno');
+                    if (estado === 'pensando' || estado === 'oculto') return;
+                    if (estado === 'hablando') {
+                        try { api.functions.interrupt(); } catch (e) {}
+                    }
+                    empezarEscucha();
+                });
+
+                // Si D-ID vuelve a abrir el micrófono (nuevo stream), rehacer el medidor
+                window.__micManual.alNuevoStream.push(() => {
+                    fuente = null; analizador = null;
+                    if (estado === 'escuchando') prepararAnalizador();
+                });
+
+                function conectarEventos() {
+                    api.events.on('connection', ({ state }) => {
+                        const s = String(state || '').toLowerCase();
+                        log('conexión:', s);
+                        if (s === 'connected' && !conectado) {
+                            conectado = true;
+                            silenciar(true);   // arranca callado mientras el avatar saluda
+                            try { api.configure({ showMicToggle: false }); } catch (e) {}
+                            pintar(actividad === 'TALKING' ? 'hablando' : 'listo');
+                        }
+                        if (['disconnected', 'disconnecting', 'closed', 'fail'].includes(s)) {
+                            conectado = false;
+                            if (estado === 'escuchando') terminarEscucha('desconexión');
+                            pintar('oculto');
+                        }
+                    });
+
+                    api.events.on('agentActivity', ({ state }) => {
+                        actividad = String(state || '').toUpperCase();
+                        if (!conectado) return;
+                        if (actividad === 'TALKING' || actividad === 'LOADING' || actividad === 'BUFFERING') {
+                            // El agente ya recibió la pregunta o está hablando: micrófono fuera
+                            if (estado === 'escuchando') terminarEscucha('respuesta del agente');
+                            else silenciar(true);
+                            pintar(actividad === 'TALKING' ? 'hablando' : 'pensando');
+                        } else if (actividad === 'IDLE' && estado !== 'escuchando') {
+                            silenciar(true);   // por si D-ID lo reabrió por su cuenta
+                            pintar('listo');
+                        }
+                    });
+                }
+
+                // Esperar la API de D-ID (hasta 30 s); si no aparece, no se toca nada
+                const t0 = Date.now();
+                const espera = setInterval(() => {
+                    const candidato = [window.DID_AGENTS_API, window['did-agent']]
+                        .find(a => a && a.events && a.functions);
+                    if (candidato) {
+                        clearInterval(espera);
+                        api = candidato;
+                        log('API de D-ID lista');
+                        conectarEventos();
+                    } else if (Date.now() - t0 > 30000) {
+                        clearInterval(espera);
+                        log('API de D-ID no disponible: micrófono con el comportamiento original');
+                    }
+                }, 200);
+
+                window.addEventListener('pagehide', () => {
+                    try { if (pistaClon) pistaClon.stop(); } catch (e) {}
+                    try { if (ctx) ctx.close(); } catch (e) {}
+                });
+            }
+
 
             // Failsafe: si tras 12s no detectamos video listo, revelamos.
             setTimeout(() => {
