@@ -211,26 +211,24 @@
         /* ── Marco con el nombre del personaje ──────────────────────── */
         .marco-nombre {
             position: fixed;
-            top: 0; left: 0; right: 0;
+            top: calc(12px + env(safe-area-inset-top, 0px));
+            left: 50%;                       /* respaldo; el JS lo reubica */
+            transform: translateX(-50%);
             z-index: 15;
             display: none;
-            flex-direction: column;
             align-items: center;
-            justify-content: center;
-            text-align: center;
-            gap: 2px;
-            padding: 10px 72px;   /* deja aire a los lados para el botón Volver */
-            padding-top: calc(12px + env(safe-area-inset-top, 0px));
-            background: linear-gradient(to bottom, rgba(10,8,7,.62) 0%, rgba(10,8,7,.28) 70%, transparent 100%);
+            gap: 8px;
+            max-width: calc(100vw - 150px);  /* no invadir el botón Volver */
+            padding: 7px 16px;
+            border-radius: 999px;
+            background: rgba(10,8,7,.55);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
             pointer-events: none;
         }
         .marco-nombre.visible { display: flex; }
-        /* Nombre + "en vivo" en una línea, centrados */
-        .marco-nombre .linea {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
+        .marco-nombre .linea { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .marco-nombre b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .marco-nombre .punto {
             width: 8px; height: 8px; border-radius: 50%;
             background: #4ade80; flex: none;
@@ -466,7 +464,6 @@
 
     <div class="marco-nombre" id="marcoNombre" aria-hidden="true">
         <span class="linea"><span class="punto"></span><b id="marcoNombreTexto"></b></span>
-        <span class="etiqueta">en vivo</span>
     </div>
 
     <button type="button" class="mic-manual" id="micManual" data-estado="oculto">
@@ -1196,17 +1193,25 @@
                     }
                     return island;
                 }
+                const marco = document.getElementById('marcoNombre');
                 function colocarBoton() {
                     rafAnclaje = 0;
                     const el = (island && island.isConnected) ? island : buscarIsland();
                     if (!el) return;
                     const r = el.getBoundingClientRect();
                     if (!r.width) return;
+                    const centroX = r.left + r.width / 2;
+                    // Botón: sobre la barra de controles
                     btn.style.position  = 'fixed';
-                    btn.style.left      = (r.left + r.width / 2) + 'px';
+                    btn.style.left      = centroX + 'px';
                     btn.style.top       = (r.top - GAP_ISLAND) + 'px';
                     btn.style.bottom    = 'auto';
                     btn.style.transform = 'translate(-50%, -100%)';
+                    // Marco del nombre: mismo centro X, pero arriba
+                    if (marco) {
+                        marco.style.left      = centroX + 'px';
+                        marco.style.transform = 'translateX(-50%)';
+                    }
                 }
                 function programarAnclaje() {
                     if (!rafAnclaje) rafAnclaje = requestAnimationFrame(colocarBoton);
