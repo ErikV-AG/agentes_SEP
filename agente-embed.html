@@ -214,14 +214,23 @@
             top: 0; left: 0; right: 0;
             z-index: 15;
             display: none;
+            flex-direction: column;
             align-items: center;
-            gap: 10px;
-            padding: 10px 18px;
-            padding-top: calc(10px + env(safe-area-inset-top, 0px));
+            justify-content: center;
+            text-align: center;
+            gap: 2px;
+            padding: 10px 72px;   /* deja aire a los lados para el botón Volver */
+            padding-top: calc(12px + env(safe-area-inset-top, 0px));
             background: linear-gradient(to bottom, rgba(10,8,7,.62) 0%, rgba(10,8,7,.28) 70%, transparent 100%);
             pointer-events: none;
         }
         .marco-nombre.visible { display: flex; }
+        /* Nombre + "en vivo" en una línea, centrados */
+        .marco-nombre .linea {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
         .marco-nombre .punto {
             width: 8px; height: 8px; border-radius: 50%;
             background: #4ade80; flex: none;
@@ -241,9 +250,11 @@
             text-shadow: 0 1px 6px rgba(0,0,0,.5);
             line-height: 1.1;
         }
-        .marco-nombre span {
-            font-size: 0.75rem;
-            color: rgba(255,255,255,.82);
+        .marco-nombre .etiqueta {
+            font-size: 0.6875rem;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,.7);
             text-shadow: 0 1px 6px rgba(0,0,0,.5);
         }
         /* En SaberesMX la pleca va encima; el marco baja un poco */
@@ -454,9 +465,8 @@
     <div id="did-container"></div>
 
     <div class="marco-nombre" id="marcoNombre" aria-hidden="true">
-        <span class="punto"></span>
-        <b id="marcoNombreTexto"></b>
-        <span id="marcoNombreEtiqueta">en vivo</span>
+        <span class="linea"><span class="punto"></span><b id="marcoNombreTexto"></b></span>
+        <span class="etiqueta">en vivo</span>
     </div>
 
     <button type="button" class="mic-manual" id="micManual" data-estado="oculto">
