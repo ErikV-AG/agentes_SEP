@@ -776,9 +776,18 @@
                   'Tu conexión es lenta. Esto puede afectar tu experiencia.',
                 'the agent is temporarily unavailable. please try again later.':
                   'El personaje no está disponible por el momento. Inténtalo más tarde.',
+                /* Redacción del build actual (noviembre 2026) */
+                'the agent is unavailable. try again later.':
+                  'El personaje no está disponible por el momento. Inténtalo más tarde.',
+                'the agent is unavailable.':     'El personaje no está disponible por el momento.',
+                'the agent is unavailable':      'El personaje no está disponible por el momento',
+                'try again later.':              'Inténtalo más tarde.',
+                'try again later':               'Inténtalo más tarde',
+                'try again':                     'Intentar de nuevo',
 
                 /* ---------- Encuesta de fin de conversación ---------- */
                 'rate your experience':          'Califica tu experiencia',
+                'how was your experience?':      '¿Cómo te fue en la conversación?',
                 'submit':                        'Enviar',
                 'thanks for your feedback!':     '¡Gracias por tus comentarios!',
                 "couldn't send your feedback. please try again.":
@@ -791,6 +800,10 @@
                 'connecting overlay':            'Pantalla de conexión',
                 'agent idle video':              'Video del personaje en espera',
                 'agent video stream':            'Video del personaje en vivo',
+                'toggle panel':                  'Mostrar u ocultar panel',
+                'toggle messages':               'Mostrar u ocultar mensajes',
+                'tools':                         'Herramientas',
+                'ai avatar':                     'Avatar con IA',
 
                 // Quita esta línea si prefieres conservar el distintivo "AI"
                 'ai':                            'IA',
@@ -1089,14 +1102,100 @@
             }, 400);
 
             /* ==============================================================
+               Reintento automático cuando D-ID no logra unir al avatar
+
+               A veces D-ID crea la sesión pero el avatar no entra a la sala
+               y, a los ~20 s, el widget muestra "The agent is unavailable".
+               Casi siempre funciona al segundo intento. Aquí se detecta ese
+               aviso, se cierra la sesión fallida y se vuelve a pulsar
+               "Iniciar conversación" en la misma página (la persona ya dio
+               el gesto, así que el audio no se bloquea). Máximo REINTENTOS
+               veces; después se deja el aviso para que la persona decida.
+            ============================================================== */
+            const REINTENTOS = 2;
+            let reintentosHechos = 0;
+            let reintentando = false;
+            const PATRONES_NO_DISPONIBLE = [
+                'agent is unavailable',
+                'agent is temporarily unavailable',
+                'personaje no está disponible',
+            ];
+
+            function hayAvisoNoDisponible() {
+                for (const r of recolectarRaices(document.body)) {
+                    if (r === loader || r === errorEl || r === backBtn) continue;
+                    const txt = normalizar(r.textContent || '');
+                    if (PATRONES_NO_DISPONIBLE.some(p => txt.includes(p))) return true;
+                }
+                return false;
+            }
+
+            function buscarBotonInicio() {
+                for (const r of recolectarRaices(document.body)) {
+                    const els = r.querySelectorAll ? r.querySelectorAll('button, [role="button"], a') : [];
+                    for (const el of els) {
+                        const txt  = normalizar(el.textContent || '');
+                        const aria = normalizar((el.getAttribute && el.getAttribute('aria-label')) || '');
+                        if (patronesStart.some(p => txt.startsWith(p) || aria.startsWith(p))) return el;
+                    }
+                }
+                return null;
+            }
+
+            function buscarBotonCerrarAviso() {
+                const textos = ['entendido', 'understood', 'cerrar', 'close', 'intentar de nuevo', 'try again', 'reconectar', 'reconnect'];
+                for (const r of recolectarRaices(document.body)) {
+                    const els = r.querySelectorAll ? r.querySelectorAll('button, [role="button"]') : [];
+                    for (const el of els) {
+                        const txt  = normalizar(el.textContent || '');
+                        const aria = normalizar((el.getAttribute && el.getAttribute('aria-label')) || '');
+                        if (textos.includes(txt) || textos.includes(aria)) return el;
+                    }
+                }
+                return null;
+            }
+
+            async function reintentar() {
+                if (reintentando || reintentosHechos >= REINTENTOS) return;
+                reintentando = true;
+                reintentosHechos++;
+                console.warn('[agente-embed] D-ID: personaje no disponible; reintento', reintentosHechos, 'de', REINTENTOS);
+                const espera = ms => new Promise(z => setTimeout(z, ms));
+                // D-ID ya cerró la sesión fallida; no se destruye el widget
+                // para que el botón de inicio siga disponible.
+                await espera(1500);
+                const cerrar = buscarBotonCerrarAviso();
+                if (cerrar) { try { cerrar.click(); } catch (e) {} }
+                // Esperar hasta 10 s a que reaparezca "Iniciar conversación"
+                for (let i = 0; i < 20; i++) {
+                    await espera(500);
+                    const inicio = buscarBotonInicio();
+                    if (inicio) {
+                        try { inicio.click(); } catch (e) {}
+                        console.log('[agente-embed] reintento lanzado');
+                        break;
+                    }
+                }
+                await espera(4000);
+                reintentando = false;
+            }
+
+            const vigilanciaDisponible = setInterval(() => {
+                if (!reintentando && hayAvisoNoDisponible()) reintentar();
+            }, 1000);
+
+            /* ==============================================================
                Cierre limpio al salir de la página
             ============================================================== */
             /* Cerrar la sesión de D-ID al salir. Si la sesión queda
                abierta, sigue ocupando un lugar del plan hasta que D-ID
                la expira, y el siguiente visitante cae en la sala de
                espera ("Buscando al agente"). */
-            function cerrarSesion() {
-                clearInterval(traduccionInterval);
+            function cerrarSesion(definitivo = true) {
+                if (definitivo) {
+                    clearInterval(traduccionInterval);
+                    try { clearInterval(vigilanciaDisponible); } catch (e) {}
+                }
                 const candidatos = [
                     document.querySelector('did-agent'),
                     window['did-agent'],
