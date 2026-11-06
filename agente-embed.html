@@ -1274,6 +1274,12 @@
                 const UMBRAL      = 0.02;   // nivel (RMS) que cuenta como voz
 
                 let api = null, estado = 'oculto', conectado = false, actividad = 'IDLE';
+                /* Tras interrumpir, D-ID sigue reportando TALKING/BUFFERING
+                   durante un momento. Sin esta ventana, ese aviso tardío se
+                   tomaba como "llegó la respuesta" y cerraba el micrófono en
+                   cuanto el alumno empezaba a hablar. */
+                const GRACIA_INTERRUPCION_MS = 2500;
+                let ignorarActividadHasta = 0;
                 let ctx = null, analizador = null, fuente = null, pistaClon = null;
                 let temporizador = 0, tInicio = 0, tUltimaVoz = 0, huboVoz = false;
 
@@ -1426,7 +1432,9 @@
                     if (estado === 'escuchando') return terminarEscucha('toque del alumno');
                     if (estado === 'pensando' || estado === 'oculto') return;
                     if (estado === 'hablando') {
-                        try { api.functions.interrupt(); } catch (e) {}
+                        ignorarActividadHasta = performance.now() + GRACIA_INTERRUPCION_MS;
+                        try { api.functions.interrupt(); log('interrupción enviada'); }
+                        catch (e) { log('interrupt falló', e); }
                     }
                     empezarEscucha();
                 });
@@ -1459,6 +1467,12 @@
                         actividad = String(state || '').toUpperCase();
                         if (!conectado) return;
                         if (actividad === 'TALKING' || actividad === 'LOADING' || actividad === 'BUFFERING') {
+                            // Aviso tardío de la respuesta que se acaba de interrumpir:
+                            // el micrófono sigue abierto para el alumno.
+                            if (estado === 'escuchando' && performance.now() < ignorarActividadHasta) {
+                                log('actividad ignorada tras interrupción:', actividad);
+                                return;
+                            }
                             // El agente ya recibió la pregunta o está hablando: micrófono fuera
                             if (estado === 'escuchando') terminarEscucha('respuesta del agente');
                             else silenciar(true);
