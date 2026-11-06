@@ -14,23 +14,128 @@
          Debe ir como script clásico (no module) en el <head>, ANTES de
          cualquier otra cosa que pueda crear shadow DOMs. -->
     <script>
+        /* Modo integrado para SaberesMX (?modo=saberes): sin login, sin
+           botón "Volver" y con la paleta del sitio. Se marca aquí, antes de
+           pintar, para que no se vea ni un instante el estilo por defecto. */
+        if (new URLSearchParams(location.search).get('modo') === 'saberes') {
+            document.documentElement.classList.add('modo-saberes');
+        }
+    </script>
+    <script>
+        /* ==================================================================
+           MICRÓFONO MANUAL (modo SaberesMX)
+
+           La conversación arranca con el micrófono apagado mientras el avatar
+           saluda. El alumno toca "Toca para hablar" para abrirlo y toca de
+           nuevo para terminar. También se cierra solo si el avatar empieza a
+           responder, para no captar su voz por las bocinas. Se pide al
+           navegador supresión de ruido y cancelación de eco.
+
+           Interruptor: MIC_MANUAL = false restaura el micrófono original de
+           D-ID. Fuera de ?modo=saberes no hace nada, aunque esté en true.
+        ================================================================== */
+        window.MIC_MANUAL = true;
+
         (function () {
-            const orig = Element.prototype.attachShadow;
-            Element.prototype.attachShadow = function (init) {
-                const opts = Object.assign({}, init, { mode: 'open' });
-                return orig.call(this, opts);
+            const activo = window.MIC_MANUAL === true;
+            window.__micManual = { activo: activo, stream: null, alNuevoStream: [] };
+            if (!activo || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+
+            const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+            navigator.mediaDevices.getUserMedia = async function (restricciones) {
+                try {
+                    if (restricciones && restricciones.audio) {
+                        const base = restricciones.audio === true ? {} : restricciones.audio;
+                        restricciones = Object.assign({}, restricciones, {
+                            audio: Object.assign({ autoGainControl: true }, base, {
+                                echoCancellation: true,
+                                noiseSuppression: true,
+                            }),
+                        });
+                    }
+                } catch (e) {}
+                const stream = await original(restricciones);
+                try {
+                    if (stream.getAudioTracks().length) {
+                        window.__micManual.stream = stream;
+                        window.__micManual.alNuevoStream.forEach(fn => { try { fn(stream); } catch (e) {} });
+                    }
+                } catch (e) {}
+                return stream;
             };
         })();
     </script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500&family=Archivo:wght@400;500;600&display=swap">
+    <script>
+        (function () {
+            /* Relleno de pantalla en monitores anchos.
+               El video del avatar tiene la proporción de la imagen original
+               (~16:9). En pantallas más anchas, D-ID rellena los lados con
+               una copia desenfocada. Con este estilo, en pantallas
+               horizontales más anchas que 16:9 el video cubre todo el ancho
+               (recorta un poco arriba y abajo, protegiendo la cabeza).
+               En celulares y pantallas verticales no se toca nada.
+               Para desactivarlo: RELLENAR_ANCHO = false. */
+            const RELLENAR_ANCHO = true;
+            const CSS_RELLENO = `
+                @media (orientation: landscape) and (min-aspect-ratio: 17/9) {
+                    video {
+                        object-fit: cover !important;
+                        object-position: center 25% !important;
+                    }
+                }`;
 
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+            const orig = Element.prototype.attachShadow;
+            Element.prototype.attachShadow = function (init) {
+                const opts = Object.assign({}, init, { mode: 'open' });
+                const root = orig.call(this, opts);
+                if (RELLENAR_ANCHO) {
+                    try {
+                        const st = document.createElement('style');
+                        st.textContent = CSS_RELLENO;
+                        root.appendChild(st);
+                    } catch (e) {}
+                }
+                return root;
+            };
+            // Por si el video no vive en un shadow DOM
+            if (RELLENAR_ANCHO) {
+                const st = document.createElement('style');
+                st.textContent = CSS_RELLENO;
+                document.head.appendChild(st);
+            }
+        })();
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Noto+Serif:wght@600;700&display=swap" rel="stylesheet">
     <style>
+        @font-face {
+            font-family: 'Patria';
+            src: local('Patria Bold'), url('static/fonts/Patria-Bold.woff2') format('woff2');
+            font-weight: 700; font-display: swap;
+        }
+
+        /* Paleta institucional Gobierno de México 2024-2030 */
         :root {
-            --bg-base:    #070d1a;
-            --border:     rgba(255,255,255,0.07);
-            --text:       #e8edf5;
-            --text-muted: rgba(232,237,245,0.55);
-            --accent:     #3b82f6;
+            --guinda:        #9b2247;
+            --guinda-oscuro: #611232;
+            --verde:         #1e5b4f;
+            --verde-oscuro:  #002f2a;
+            --dorado:        #a57f2c;
+            --dorado-claro:  #e6d194;
+            --negro:         #161a1d;
+            --gris:          #98989a;
+            --gris-texto:    #545454;
+            --linea:         #e4e1da;
+            --fondo:         #ffffff;
+
+            /* Color propio del agente; se ajusta por JS según el key */
+            --tono:          var(--guinda);
+
+            --f-titulo: 'Patria', 'Noto Serif', Georgia, serif;
+            --f-texto:  'Noto Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body {
@@ -39,49 +144,58 @@
             overscroll-behavior: none;
         }
         body {
-            font-family: 'Inter', sans-serif;
-            background: var(--bg-base);
-            background-image: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(59,130,246,0.12) 0%, transparent 60%);
-            color: var(--text);
+            font-family: var(--f-texto);
+            background: var(--fondo);
+            color: var(--negro);
             overflow: hidden;
         }
 
-        /* Botón flotante para volver al selector.
-           Respeta el notch y la barra de estado del celular. */
+        /* Pleca guinda + dorada en el borde superior, sobre el widget */
+        .pleca {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: calc(4px + env(safe-area-inset-top, 0px));
+            background: var(--guinda-oscuro);
+            border-bottom: 2px solid var(--dorado);
+            z-index: 30;
+            pointer-events: none;
+        }
+
+        /* Botón flotante para volver al selector. Respeta notch. */
         .back-btn {
             position: fixed;
-            top:  calc(16px + env(safe-area-inset-top, 0px));
+            top:  calc(18px + env(safe-area-inset-top, 0px));
             left: calc(16px + env(safe-area-inset-left, 0px));
             z-index: 20;
             display: flex;
             align-items: center;
             gap: 6px;
             padding: 8px 14px;
-            background: rgba(0,0,0,0.55);
-            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.94);
+            border: 1px solid var(--linea);
             border-radius: 999px;
-            color: var(--text);
+            color: var(--guinda-oscuro);
             font-family: inherit;
             font-size: 13px;
-            font-weight: 500;
+            font-weight: 600;
             cursor: pointer;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            transition: background 0.15s ease, border-color 0.15s ease;
+            box-shadow: 0 2px 10px rgba(22,26,29,0.12);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
             text-decoration: none;
         }
         .back-btn:hover {
-            background: rgba(255,255,255,0.08);
-            border-color: rgba(255,255,255,0.2);
+            background: var(--guinda-oscuro);
+            border-color: var(--guinda-oscuro);
+            color: #fff;
         }
+        .back-btn:focus-visible { outline: 3px solid var(--dorado); outline-offset: 2px; }
         .back-btn svg { fill: currentColor; }
 
-        /* Container del agente. Empieza OCULTO con opacity:0 para que la UI
-           inicial del widget de D-ID (textos en inglés, spinners propios) no
-           sea visible al usuario hasta que esté listo.
-
-           100dvh = altura visible real en móvil (sin la zona que tapa la
-           barra del navegador). 100vh queda como respaldo. */
+        /* Container del agente. Empieza OCULTO hasta que el widget esté
+           listo (evita ver la UI en inglés de D-ID). 100dvh = alto real
+           visible en móvil; 100vh como respaldo. */
         #did-container {
             position: fixed;
             inset: 0;
@@ -94,20 +208,70 @@
         }
         #did-container.ready { opacity: 1; }
 
-        /* Loader nuestro — cubre todo el viewport hasta el reveal */
+        /* ── Marco con el nombre del personaje ──────────────────────── */
+        .marco-nombre {
+            position: fixed;
+            top: calc(12px + env(safe-area-inset-top, 0px));
+            left: 50%;                       /* respaldo; el JS lo reubica */
+            transform: translateX(-50%);
+            z-index: 15;
+            display: none;
+            align-items: center;
+            gap: 8px;
+            max-width: calc(100vw - 150px);  /* no invadir el botón Volver */
+            padding: 7px 16px;
+            border-radius: 999px;
+            background: rgba(10,8,7,.55);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            pointer-events: none;
+        }
+        .marco-nombre.visible { display: flex; }
+        .marco-nombre .linea { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .marco-nombre b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .marco-nombre .punto {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #4ade80; flex: none;
+            box-shadow: 0 0 0 0 rgba(74,222,128,.6);
+            animation: latido 2s ease-out infinite;
+        }
+        @keyframes latido {
+            0%   { box-shadow: 0 0 0 0 rgba(74,222,128,.55); }
+            70%  { box-shadow: 0 0 0 7px rgba(74,222,128,0); }
+            100% { box-shadow: 0 0 0 0 rgba(74,222,128,0); }
+        }
+        .marco-nombre b {
+            font-family: var(--f-titulo);
+            font-weight: 700;
+            font-size: 1.0625rem;
+            color: #fff;
+            text-shadow: 0 1px 6px rgba(0,0,0,.5);
+            line-height: 1.1;
+        }
+        .marco-nombre .etiqueta {
+            font-size: 0.6875rem;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,.7);
+            text-shadow: 0 1px 6px rgba(0,0,0,.5);
+        }
+        /* En SaberesMX la pleca va encima; el marco baja un poco */
+        .modo-saberes .marco-nombre { padding-top: calc(12px + env(safe-area-inset-top, 0px)); }
+        @media (prefers-reduced-motion: reduce) { .marco-nombre .punto { animation: none; } }
+
+        /* Loader — cubre todo el viewport hasta el reveal */
         .loader {
             position: fixed;
             inset: 0;
             z-index: 10;
-            background: var(--bg-base);
-            background-image: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(59,130,246,0.12) 0%, transparent 60%);
+            background: var(--fondo);
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 20px;
-            color: var(--text-muted);
-            font-size: 14px;
+            gap: 18px;
+            padding: 24px;
+            text-align: center;
             transition: opacity 0.5s ease, visibility 0.5s ease;
         }
         .loader.hidden {
@@ -115,26 +279,45 @@
             visibility: hidden;
             pointer-events: none;
         }
-        .spinner {
-            width: 32px; height: 32px;
-            border: 2px solid var(--border);
-            border-top-color: var(--accent);
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
+        #loaderName {
+            font-family: var(--f-titulo);
+            font-weight: 700;
+            font-size: clamp(1.75rem, 5vw, 2.5rem);
+            line-height: 1.15;
+            color: var(--guinda-oscuro);
+            min-height: 1.15em;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        /* Barra de progreso indeterminada en el color del agente */
+        .progreso {
+            width: 160px;
+            height: 3px;
+            background: var(--linea);
+            border-radius: 2px;
+            overflow: hidden;
+            position: relative;
+        }
+        .progreso::after {
+            content: '';
+            position: absolute;
+            top: 0; bottom: 0;
+            width: 40%;
+            background: var(--tono);
+            border-radius: 2px;
+            animation: avance 1.3s ease-in-out infinite;
+        }
+        @keyframes avance {
+            from { left: -40%; }
+            to   { left: 100%; }
+        }
         #loaderText {
-            font-size: 13px;
-            letter-spacing: 0.3px;
-            color: var(--text-muted);
-            min-height: 1.2em;
+            font-size: 14px;
+            color: var(--gris-texto);
+            min-height: 1.3em;
             transition: opacity 0.3s ease;
         }
         #loaderSubtext {
-            font-size: 11px;
-            color: rgba(232,237,245,0.3);
-            letter-spacing: 1.5px;
-            text-transform: uppercase;
+            font-size: 12px;
+            color: var(--gris);
             margin-top: -8px;
         }
 
@@ -150,17 +333,33 @@
             gap: 12px;
             text-align: center;
             padding: 24px;
-            background: var(--bg-base);
+            background: var(--fondo);
         }
         .error-msg.show { display: flex; }
-        .error-msg h2 { font-size: 1.2rem; font-weight: 600; }
-        .error-msg p { color: var(--text-muted); font-size: 14px; max-width: 360px; }
+        .error-msg h2 {
+            font-family: var(--f-titulo);
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--guinda-oscuro);
+        }
+        .error-msg p { color: var(--gris-texto); font-size: 15px; max-width: 380px; line-height: 1.5; }
+        .error-msg a {
+            margin-top: 8px;
+            color: #fff;
+            background: var(--guinda-oscuro);
+            padding: 10px 20px;
+            border-radius: 4px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .error-msg a:hover { background: var(--guinda); }
+        .error-msg a:focus-visible { outline: 3px solid var(--dorado); outline-offset: 2px; }
 
-        /* Celular: botón compacto, solo flecha, para no encimarse con los
-           controles del encabezado de D-ID. */
+        /* Celular: botón compacto, solo flecha */
         @media (max-width: 480px) {
             .back-btn {
-                top:  calc(10px + env(safe-area-inset-top, 0px));
+                top:  calc(12px + env(safe-area-inset-top, 0px));
                 left: calc(10px + env(safe-area-inset-left, 0px));
                 padding: 7px 10px;
                 font-size: 12px;
@@ -168,11 +367,93 @@
             }
             .back-btn .back-label { display: none; }
         }
+        @media (prefers-reduced-motion: reduce) {
+            .progreso::after { animation-duration: 3s; }
+            * { transition: none !important; }
+        }
+
+        /* ── Modo SaberesMX ─────────────────────────────────────────── */
+        .modo-saberes {
+            --tono:  #ff4f1f;           /* spray */
+            --f-titulo: 'DM Serif Display', Georgia, serif;
+            --f-texto:  'Archivo', 'Helvetica Neue', sans-serif;
+        }
+        /* Fondo transparente: dentro del marco de SaberesMX se ve el GIF
+           en reposo del personaje mientras el agente conecta */
+        html.modo-saberes,
+        .modo-saberes body { background: transparent; color: #f5ede0; }
+        .modo-saberes .loader {
+            background: linear-gradient(to top, rgba(10,8,7,.82) 0%, rgba(10,8,7,.35) 45%, transparent 75%);
+            justify-content: flex-end;
+            padding-bottom: 36px;
+            gap: 12px;
+        }
+        .modo-saberes #loaderName { font-size: clamp(1.5rem, 6vw, 2rem); text-shadow: 0 2px 12px rgba(0,0,0,.5); }
+        .modo-saberes .error-msg { background: #6b1a2e; color: #f5ede0; }
+
+        /* ── Botón "Toca para hablar" (micrófono manual, SaberesMX) ─── */
+        .mic-manual {
+            position: fixed;
+            left: 50%;
+            bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+            transform: translateX(-50%);
+            z-index: 25;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            max-width: calc(100% - 32px);
+            padding: 12px 20px 12px 16px;
+            border: 0;
+            border-radius: 999px;
+            font: 600 15px/1.2 var(--f-texto);
+            color: #fff;
+            background: var(--tono, #9b2247);
+            box-shadow: 0 6px 22px rgba(0, 0, 0, .35);
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            white-space: nowrap;
+        }
+        .mic-manual.visible { display: inline-flex; }
+        .mic-manual svg { width: 20px; height: 20px; flex: none; }
+        .mic-manual[data-estado="hablando"],
+        .mic-manual[data-estado="pensando"] {
+            background: rgba(10, 8, 7, .72);
+            color: #f5ede0;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+        .mic-manual[data-estado="pensando"] { cursor: default; }
+        .mic-manual[data-estado="escuchando"] { background: #f5ede0; color: #0a0807; }
+        .mic-manual:focus-visible { outline: 3px solid #b08938; outline-offset: 3px; }
+        .mic-nivel { display: none; align-items: center; gap: 3px; height: 18px; }
+        .mic-manual[data-estado="escuchando"] .mic-nivel { display: inline-flex; }
+        .mic-nivel i { display: block; width: 3px; height: 4px; border-radius: 2px; background: var(--tono, #9b2247); transition: height .08s linear; }
+        @media (prefers-reduced-motion: reduce) { .mic-nivel i { transition: none; } }
+        .modo-saberes .pleca,
+        .modo-saberes .back-btn { display: none !important; }
+        .modo-saberes #loaderName { color: #f5ede0; font-weight: 400; }
+        .modo-saberes .progreso { background: rgba(245,237,224,.2); }
+        .modo-saberes #loaderText { color: rgba(245,237,224,.7); }
+        .modo-saberes #loaderSubtext {
+            color: rgba(245,237,224,.45);
+            font-family: 'JetBrains Mono', ui-monospace, monospace;
+            letter-spacing: .12em; text-transform: uppercase; font-size: 10px;
+        }
+        .modo-saberes .error-msg h2 { color: #f5ede0; font-weight: 400; }
+        .modo-saberes .error-msg p  { color: rgba(245,237,224,.7); }
+        .modo-saberes .error-msg a  { display: none; }
+        .modo-saberes .mic-manual { background: #ff4f1f; }
+        .modo-saberes .mic-manual[data-estado="escuchando"] { background: #f5ede0; color: #0a0807; }
+        .modo-saberes .mic-manual[data-estado="hablando"],
+        .modo-saberes .mic-manual[data-estado="pensando"] { background: rgba(10,8,7,.72); color: #f5ede0; }
+        .modo-saberes .mic-nivel i { background: #ff4f1f; }
     </style>
 </head>
 <body>
 
-    <a href="/" class="back-btn" title="Volver al selector de agentes" aria-label="Volver al selector de agentes">
+    <div class="pleca" aria-hidden="true"></div>
+
+    <a href="index.html" class="back-btn" title="Volver al selector de personajes" aria-label="Volver al selector de personajes">
         <svg viewBox="0 0 24 24" width="14" height="14">
             <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
         </svg>
@@ -181,21 +462,92 @@
 
     <div id="did-container"></div>
 
-    <div class="loader" id="loader">
-        <div class="spinner"></div>
-        <span id="loaderText">Cargando agente…</span>
+    <div class="marco-nombre" id="marcoNombre" aria-hidden="true">
+        <span class="linea"><span class="punto"></span><b id="marcoNombreTexto"></b></span>
+    </div>
+
+    <button type="button" class="mic-manual" id="micManual" data-estado="oculto">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+        <span class="mic-texto" aria-live="polite">Toca para hablar</span>
+        <span class="mic-nivel" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+    </button>
+
+    <div class="loader" id="loader" role="status" aria-live="polite">
+        <span id="loaderName"></span>
+        <div class="progreso" aria-hidden="true"></div>
+        <span id="loaderText">Cargando personaje…</span>
         <span id="loaderSubtext">Person-AG</span>
     </div>
 
     <div class="error-msg" id="errorMsg">
-        <h2>No se pudo cargar el agente</h2>
-        <p id="errorDetail">Verifica que el agente exista y que tenga configurado el embed de D-ID.</p>
+        <h2>No se pudo cargar el personaje</h2>
+        <p id="errorDetail">Revisa la configuración del personaje en este archivo.</p>
+        <a href="index.html">Volver al inicio</a>
     </div>
 
     <script>
-        // Auth check
-        if (sessionStorage.getItem('ag_auth') !== 'true') {
-            window.location.href = '/login';
+        /* ==================================================================
+           CONFIGURACIÓN DE LOS AGENTES
+           Pega aquí el Agent ID y el Client Key de cada agente, tal como
+           aparecen en D-ID Studio → Agents → Embed. Sustituye a /api/agents.
+        ================================================================== */
+        const AGENTES = {
+            benito: {
+                name:           'Benito Juárez',
+                did_agent_id:   'v2_agt_-WUQyHtK',
+                did_client_key: 'ck_7cA6gTfKCJeddMIsdUTGd',
+            },
+            leona: {
+                name:           'Leona Vicario',
+                did_agent_id:   'v2_agt_6PqkQdqv',
+                did_client_key: 'ck_9_4BlM4kU3BpP0HRtzGDg',
+            },
+            rosario: {
+                name:           'Rosario Castellanos',
+                did_agent_id:   'v2_agt_o8lyGJjJ',
+                did_client_key: 'ck_u-EPE1qrVgPFbPVK2RlCg',
+            },
+            zaragoza: {
+                name:           'Ignacio Zaragoza',
+                did_agent_id:   'v2_agt_g-bX0Owu',
+                did_client_key: 'ck_fNirEnUNCKBhiE-SWoo1g',
+            },
+            hidalgo: {
+                name:           'Miguel Hidalgo',
+                did_agent_id:   'v2_agt_kw7df4aG',
+                did_client_key: 'ck_CiXeOian2EuO1CUf4FOOO',
+            },
+            elvia: {
+                name:           'Elvia Carrillo Puerto',
+                did_agent_id:   'v2_agt_EJ4HxAiA',
+                did_client_key: 'ck_tyx4jMaZWUvhxukO1fvBV',
+            },
+            rita: {
+                name:           'Rita Cetina Gutiérrez',
+                did_agent_id:   'v2_agt_5rPHVSr0',
+                did_client_key: 'ck_gDUkoVHSjxsjppdbgdLZd',
+            },
+            matilde: {
+                name:           'Matilde Montoya',
+                did_agent_id:   'v2_agt_1oUlE7Ka',
+                did_client_key: 'ck_DQ8jToXKVLHWJf54gte7K',
+            },
+            tlacaelel: {
+                name:           'Tlacaélel',
+                did_agent_id:   'v2_agt_uguR1c1k',
+                did_client_key: 'ck_hH6zxlLYHSMDeoGXkPfN1',
+            },
+            rulfo: {
+                name:           'Juan Rulfo',
+                did_agent_id:   'v2_agt_xQN4_DHL',
+                did_client_key: 'ck_RLEiWIG2Ax8OPZ4jiogGg',
+            },
+        };
+
+        // Auth check (el modo SaberesMX no pide código: el sitio es la entrada)
+        const MODO_SABERES = document.documentElement.classList.contains('modo-saberes');
+        if (!MODO_SABERES && sessionStorage.getItem('ag_auth') !== 'true') {
+            window.location.href = 'login.html';
         }
 
         (async function () {
@@ -209,6 +561,16 @@
             const errorEl     = document.getElementById('errorMsg');
             const errorDt     = document.getElementById('errorDetail');
             const backBtn     = document.querySelector('.back-btn');
+            if (MODO_SABERES) {
+                document.getElementById('loaderSubtext').textContent = 'Habla con la historia · SaberesMX';
+            }
+            const loaderName  = document.getElementById('loaderName');
+
+            // Color institucional de cada agente (igual que en el selector)
+            const TONOS = { benito: '--guinda', leona: '--verde', rosario: '--dorado', zaragoza: '--verde-oscuro', hidalgo: '--guinda-oscuro', elvia: '--guinda', rita: '--verde-oscuro', matilde: '--dorado', tlacaelel: '--verde', rulfo: '--guinda-oscuro' };
+            if (TONOS[agentKey] && !MODO_SABERES) {   // en SaberesMX se queda el naranja del sitio
+                document.documentElement.style.setProperty('--tono', `var(${TONOS[agentKey]})`);
+            }
 
             function showError(msg) {
                 if (msg) errorDt.textContent = msg;
@@ -217,31 +579,28 @@
             }
 
             if (!agentKey) {
-                showError('Falta el parámetro "key" en la URL. Ejemplo: /agente?key=hayek');
+                showError('Falta el parámetro "key" en la URL. Ejemplo: agente-embed.html?key=benito');
                 return;
             }
 
-            // ── Config del agente ─────────────────────────────────────────
-            let cfg = null;
-            try {
-                const res    = await fetch('/api/agents');
-                const allCfg = await res.json();
-                cfg          = allCfg[agentKey];
-            } catch (err) {
-                showError('No se pudo obtener la configuración del agente.');
+            // ── Config del agente (sin backend) ───────────────────────────
+            const cfg = AGENTES[agentKey];
+
+            if (!cfg)                                            { showError(`El agente "${agentKey}" no existe. Los disponibles son: ${Object.keys(AGENTES).join(", ")}.`); return; }
+            if (!cfg.did_agent_id || !cfg.did_client_key ||
+                cfg.did_agent_id.startsWith('PEGA_') || cfg.did_client_key.startsWith('PEGA_')) {
+                showError(`Faltan el ID o la Client Key de ${cfg.name || agentKey}. Agrégalos en la sección AGENTES al inicio del script de agente-embed.html.`);
                 return;
             }
-
-            if (!cfg)                                            { showError(`El agente "${agentKey}" no existe en la configuración.`); return; }
-            if (!cfg.use_embed)                                  { showError(`El agente "${cfg.name || agentKey}" no está configurado para modo embed.`); return; }
-            if (!cfg.did_agent_id || !cfg.did_client_key)        { showError('Faltan did_agent_id o did_client_key.'); return; }
 
             // ── Loader animado ────────────────────────────────────────────
             document.title         = `${cfg.name || agentKey} — Person-AG`;
-            loaderText.textContent = `Cargando ${cfg.name || agentKey}…`;
+            loaderName.textContent = cfg.name || agentKey;
+            document.getElementById('marcoNombreTexto').textContent = cfg.name || agentKey;
+            loaderText.textContent = 'Conectando…';
 
             const mensajes = [
-                `Cargando ${cfg.name || agentKey}…`,
+                'Conectando…',
                 'Preparando interacción…',
                 'Casi listo…',
             ];
@@ -285,13 +644,39 @@
                    o la deja en un solo nodo de texto. */
                 'connecting call...':            'Conectando…',
                 'setting up your agent. this usually takes a few seconds.':
-                  'Preparando al agente. Esto suele tardar unos segundos.',
-                'setting up your agent.':        'Preparando al agente.',
-                'setting up your agent':         'Preparando al agente',
+                  'Preparando al personaje. Esto suele tardar unos segundos.',
+                'setting up your agent.':        'Preparando al personaje.',
+                'setting up your agent':         'Preparando al personaje',
                 'this usually takes a few seconds.':
                   'Esto suele tardar unos segundos.',
                 'this usually takes a few seconds':
                   'Esto suele tardar unos segundos',
+
+                /* Sala de espera: aparece cuando D-ID no tiene una sesión
+                   libre (todas las conversaciones simultáneas del plan
+                   están ocupadas). Frase completa y mitades por separado. */
+                'looking for agent':             'Buscando al personaje',
+                "finding an available agent for you. this won't take long.":
+                  'Estamos buscando un personaje disponible. No tardará mucho.',
+                'finding an available agent for you.':
+                  'Estamos buscando un personaje disponible.',
+                'finding an available agent for you':
+                  'Estamos buscando un personaje disponible',
+                "this won't take long.":         'No tardará mucho.',
+                "this won't take long":          'No tardará mucho',
+
+                /* Alta demanda: D-ID no tiene sesión disponible (su
+                   capacidad o el límite de sesiones simultáneas del plan). */
+                'high demand':                   'Alta demanda',
+                "we're experiencing unusually high demand right now. please try again in a moment.":
+                  'En este momento hay una demanda inusualmente alta. Inténtalo de nuevo en un momento.',
+                "we're experiencing unusually high demand right now.":
+                  'En este momento hay una demanda inusualmente alta.',
+                "we're experiencing unusually high demand right now":
+                  'En este momento hay una demanda inusualmente alta',
+                'please try again in a moment.': 'Inténtalo de nuevo en un momento.',
+                'please try again in a moment':  'Inténtalo de nuevo en un momento',
+                'try again':                     'Intentar de nuevo',
 
                 'hang tight':                    'Un momento',
                 'reconnect':                     'Reconectar',
@@ -302,6 +687,23 @@
                 'want to continue where we left off?': '¿Quieres continuar donde nos quedamos?',
                 'are you still here?':           '¿Sigues ahí?',
                 'call ended':                    'Conversación finalizada',
+                'thanks for talking with us.':   'Gracias por conversar con nosotros.',
+                'thanks for talking with us':    'Gracias por conversar con nosotros',
+                'thanks for talking with us!':   '¡Gracias por conversar con nosotros!',
+                'start new call':                'Iniciar nueva conversación',
+                'start a new call':              'Iniciar nueva conversación',
+                'new call':                      'Nueva conversación',
+                'messages':                      'Mensajes',
+                'message':                       'Mensaje',
+                'transcript':                    'Transcripción',
+                'transcripts':                   'Transcripciones',
+                'view transcript':               'Ver transcripción',
+                'show transcript':               'Mostrar transcripción',
+                'hide transcript':               'Ocultar transcripción',
+                'download transcript':           'Descargar transcripción',
+                'copy transcript':               'Copiar transcripción',
+                'no messages yet':               'Aún no hay mensajes',
+                'no messages yet.':              'Aún no hay mensajes.',
                 'understood':                    'Entendido',
                 'skip':                          'Omitir',
                 'close':                         'Cerrar',
@@ -330,9 +732,23 @@
                 'close chat':                    'Cerrar chat',
                 'type your message here...':     'Escribe tu mensaje aquí...',
                 'send message':                  'Enviar mensaje',
+                'type something':                'Escribe algo',
+                'type something...':             'Escribe algo...',
+                'type a message':                'Escribe un mensaje',
+                'type a message...':             'Escribe un mensaje...',
+                'type your message':             'Escribe tu mensaje',
+                'type your message...':          'Escribe tu mensaje...',
+                'type your message here':        'Escribe tu mensaje aquí',
+                'type your message here...':     'Escribe tu mensaje aquí...',
+                'type here':                     'Escribe aquí',
+                'type here...':                  'Escribe aquí...',
+                'ask me anything':              'Pregúntame lo que quieras',
+                'ask me anything...':           'Pregúntame lo que quieras...',
+                'send a message':                'Envía un mensaje',
+                'send a message...':             'Envía un mensaje...',
                 'please wait until the response is complete': 'Espera a que termine la respuesta',
-                'agent response':                'Respuesta del agente',
-                'agent is thinking':             'El agente está pensando',
+                'agent response':                'Respuesta del personaje',
+                'agent is thinking':             'El personaje está pensando',
                 'stop viewing':                  'Dejar de ver',
                 'open image':                    'Abrir imagen',
                 'open video':                    'Abrir video',
@@ -343,7 +759,7 @@
                   'Tu navegador necesita permiso para usar el micrófono.',
                 'got a question?':               '¿Tienes una pregunta?',
                 'talk to a live interactive agent, just turn on your mic to start the call.':
-                  'Habla con un agente interactivo en vivo: solo enciende el micrófono para iniciar la conversación.',
+                  'Habla con un personaje interactivo en vivo: solo enciende el micrófono para iniciar la conversación.',
                 'we are blocked from using your microphone':
                   'El acceso a tu micrófono está bloqueado',
                 "click the page info icon in your browser's address bar":
@@ -353,13 +769,13 @@
                   'El acceso a tu cámara está bloqueado',
                 'turn on camera access':         'Permitir acceso a la cámara',
                 'camera will be available after generating your agent':
-                  'La cámara estará disponible después de generar tu agente',
+                  'La cámara estará disponible después de generar tu personaje',
 
                 /* ---------- Errores y red ---------- */
                 'your network quality is low. this may affect your experience.':
                   'Tu conexión es lenta. Esto puede afectar tu experiencia.',
                 'the agent is temporarily unavailable. please try again later.':
-                  'El agente no está disponible por el momento. Inténtalo más tarde.',
+                  'El personaje no está disponible por el momento. Inténtalo más tarde.',
 
                 /* ---------- Encuesta de fin de conversación ---------- */
                 'rate your experience':          'Califica tu experiencia',
@@ -373,8 +789,8 @@
                 'main controls':                 'Controles principales',
                 'welcome message':               'Mensaje de bienvenida',
                 'connecting overlay':            'Pantalla de conexión',
-                'agent idle video':              'Video del agente en espera',
-                'agent video stream':            'Video del agente en vivo',
+                'agent idle video':              'Video del personaje en espera',
+                'agent video stream':            'Video del personaje en vivo',
 
                 // Quita esta línea si prefieres conservar el distintivo "AI"
                 'ai':                            'IA',
@@ -385,6 +801,7 @@
             /* Normaliza antes de buscar. Tres cosas importan:
                - el carácter … y los tres puntos ... son intercambiables en
                  el bundle de D-ID, y no siempre usa el mismo;
+               - lo mismo con el apóstrofo tipográfico ’ y el recto ';
                - un salto de línea o doble espacio en el markup no debe
                  impedir el match;
                - la búsqueda es en minúsculas.
@@ -392,6 +809,7 @@
             function normalizar(txt) {
                 return txt
                     .replace(/\u2026/g, '...')
+                    .replace(/[\u2018\u2019\u02bc]/g, "'")   // won’t → won't
                     .replace(/\s+/g, ' ')
                     .trim()
                     .toLowerCase();
@@ -558,27 +976,34 @@
             };
 
             /* ==============================================================
-               Auto-click en el botón de inicio
+               Botón de inicio: lo pulsa la persona, no el script
 
-               El texto real del embed v2 es "Start call", no "Start
-               conversation": por eso el auto-click tampoco funcionaba. Se
-               incluye también la versión en español porque la traducción
-               puede ganarle la carrera al click.
+               Antes el script "tocaba" el botón por su cuenta. En celulares
+               eso falla: el navegador solo concede el micrófono (y el audio)
+               de forma confiable cuando la persona toca la pantalla en ese
+               momento. Un toque simulado puede terminar en permiso negado,
+               y el navegador recuerda esa negativa para el sitio.
+               Además, arrancar solo abría una sesión de D-ID con cada visita,
+               aunque nadie fuera a hablar, y eso agota las sesiones
+               simultáneas del plan ("Alta demanda").
 
-               Chrome/Safari pueden bloquear el audio sin gesto del usuario.
-               Si notas que el agente arranca mudo, comenta la línea marcada
-               más abajo y deja que el usuario pulse el botón.
+               Ahora el script solo espera a que aparezca el botón de inicio
+               (ya traducido) y en ese momento muestra el widget para que la
+               persona lo pulse. AUTO_INICIO = true restaura el
+               comportamiento anterior (no recomendado).
             ============================================================== */
+            const AUTO_INICIO = false;
+
             const patronesStart = [
                 'start call',
                 'iniciar conversación',
+                'start new call',
+                'iniciar nueva conversación',
                 'start conversation',
                 'start a conversation',
                 'start chat',
-                'continue call...',
-                'continuar conversación...',
             ];
-            let yaClickeado = false;
+            let yaClickeado = false;   // "ya encontramos el botón de inicio"
 
             function recolectarRaices(root, acc = []) {
                 acc.push(root);
@@ -603,11 +1028,16 @@
                             txt === p || aria === p || txt.startsWith(p) || aria.startsWith(p));
                         if (!hit) continue;
                         yaClickeado = true;
-                        console.log('[agente-embed] auto-click sobre botón de inicio:', txt || aria);
-                        setTimeout(() => {
-                            try { el.click(); }   // ← comenta esta línea para desactivar el auto-click
-                            catch (e) { console.warn('[agente-embed] click falló:', e); }
-                        }, 120);
+                        if (AUTO_INICIO) {
+                            console.log('[agente-embed] auto-inicio:', txt || aria);
+                            setTimeout(() => {
+                                try { el.click(); }
+                                catch (e) { console.warn('[agente-embed] click falló:', e); }
+                            }, 120);
+                        } else {
+                            console.log('[agente-embed] botón de inicio listo, esperando a la persona');
+                            reveal();
+                        }
                         return;
                     }
                 }
@@ -633,6 +1063,7 @@
                 clearInterval(startCheckInterval);
                 aplicar(); // última pasada antes de mostrar
                 container.classList.add('ready');
+                document.getElementById('marcoNombre').classList.add('visible');
                 setTimeout(() => loader.classList.add('hidden'), 250);
             }
 
@@ -660,11 +1091,33 @@
             /* ==============================================================
                Cierre limpio al salir de la página
             ============================================================== */
-            window.addEventListener('beforeunload', () => {
+            /* Cerrar la sesión de D-ID al salir. Si la sesión queda
+               abierta, sigue ocupando un lugar del plan hasta que D-ID
+               la expira, y el siguiente visitante cae en la sala de
+               espera ("Buscando al agente"). */
+            function cerrarSesion() {
                 clearInterval(traduccionInterval);
-                const a = document.querySelector('did-agent');
-                if (a && a.disconnect) a.disconnect();
-            });
+                const candidatos = [
+                    document.querySelector('did-agent'),
+                    window['did-agent'],
+                    ...container.querySelectorAll('*'),
+                ];
+                for (const a of candidatos) {
+                    if (!a) continue;
+                    for (const m of ['disconnect', 'destroy', 'close']) {
+                        try { if (typeof a[m] === 'function') a[m](); } catch (e) {}
+                    }
+                }
+                document.querySelectorAll('video').forEach(v => {
+                    try {
+                        const st = v.srcObject;
+                        if (st && st.getTracks) st.getTracks().forEach(t => t.stop());
+                    } catch (e) {}
+                });
+            }
+            window.addEventListener('pagehide', cerrarSesion);
+            window.addEventListener('beforeunload', cerrarSesion);
+            backBtn.addEventListener('click', cerrarSesion);
 
             /* ==============================================================
                Inyectar el script de D-ID
@@ -683,10 +1136,252 @@
                 clearInterval(msgInterval);
                 clearInterval(videoCheckInterval);
                 clearInterval(startCheckInterval);
-                showError('No se pudo cargar el script del agente desde D-ID.');
+                showError('No se pudo cargar el script del personaje desde D-ID.');
             };
 
             document.head.appendChild(script);
+
+            if (window.__micManual && window.__micManual.activo) {
+                iniciarMicManual(cfg.name || agentKey);
+            }
+
+            /* ==============================================================
+               Micrófono manual: "toca una vez para hablar" y se cierra solo
+               cuando el alumno deja de hablar. Si algo de la API de D-ID no
+               responde, no se toca nada y el widget funciona como siempre.
+            ============================================================== */
+            function iniciarMicManual(nombre) {
+                const btn    = document.getElementById('micManual');
+                const texto  = btn.querySelector('.mic-texto');
+                const barras = Array.from(btn.querySelectorAll('.mic-nivel i'));
+                const primerNombre = String(nombre || '').split(' ')[0];
+
+                const SILENCIO_MS = 1500;      // no se usa: cierre manual
+                const SIN_VOZ_MS  = 8000;      // no se usa: cierre manual
+                const CIERRE_MANUAL = true;    // tocar para hablar / tocar para terminar
+                const MAXIMO_MS   = 25000;  // tope de seguridad
+                const UMBRAL      = 0.02;   // nivel (RMS) que cuenta como voz
+
+                let api = null, estado = 'oculto', conectado = false, actividad = 'IDLE';
+                let ctx = null, analizador = null, fuente = null, pistaClon = null;
+                let temporizador = 0, tInicio = 0, tUltimaVoz = 0, huboVoz = false;
+
+                const log = (...a) => console.log('[mic-manual]', ...a);
+
+                /* ── Anclaje al widget de D-ID ─────────────────────────
+                   El botón sigue a la barra de controles (.didagent__island)
+                   para desplazarse cuando se abre o cierra el panel de chat.
+                   Medido en vivo: el island se recorre y se compacta; con
+                   left:50% respecto a la ventana el botón se quedaba atrás.
+                   Si no se encuentra el island, el botón conserva su posición
+                   fija de respaldo (regla .mic-manual). */
+                const didHost = document.getElementById('did-container');
+                const GAP_ISLAND = 12;
+                let island = null, roAnclaje = null, rafAnclaje = 0;
+
+                function buscarIsland() {
+                    const sr = didHost && didHost.shadowRoot;
+                    if (!sr) return null;
+                    const el = sr.querySelector('.didagent__island');
+                    if (el && el !== island) {
+                        if (roAnclaje) roAnclaje.disconnect();
+                        island = el;
+                        roAnclaje = new ResizeObserver(() => programarAnclaje());
+                        roAnclaje.observe(el);
+                        const emb = sr.querySelector('.didagent__embedded__container');
+                        if (emb) roAnclaje.observe(emb);
+                    }
+                    return island;
+                }
+                const marco = document.getElementById('marcoNombre');
+                function colocarBoton() {
+                    rafAnclaje = 0;
+                    const el = (island && island.isConnected) ? island : buscarIsland();
+                    if (!el) return;
+                    const r = el.getBoundingClientRect();
+                    if (!r.width) return;
+                    const centroX = r.left + r.width / 2;
+                    // Botón: sobre la barra de controles
+                    btn.style.position  = 'fixed';
+                    btn.style.left      = centroX + 'px';
+                    btn.style.top       = (r.top - GAP_ISLAND) + 'px';
+                    btn.style.bottom    = 'auto';
+                    btn.style.transform = 'translate(-50%, -100%)';
+                    // Marco del nombre: mismo centro X, pero arriba
+                    if (marco) {
+                        marco.style.left      = centroX + 'px';
+                        marco.style.transform = 'translateX(-50%)';
+                    }
+                }
+                function programarAnclaje() {
+                    if (!rafAnclaje) rafAnclaje = requestAnimationFrame(colocarBoton);
+                }
+                function iniciarAnclaje() {
+                    if (!didHost || !didHost.shadowRoot) { setTimeout(iniciarAnclaje, 200); return; }
+                    buscarIsland(); colocarBoton();
+                    new MutationObserver(() => { buscarIsland(); programarAnclaje(); })
+                        .observe(didHost.shadowRoot, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
+                    window.addEventListener('resize', programarAnclaje);
+                    log('anclaje al widget activo');
+                }
+
+                function silenciar(si) {
+                    try { api.functions.toggleMicState(si); }   // true = silenciar
+                    catch (e) { log('toggleMicState falló', e); }
+                }
+
+                function pintar(nuevo) {
+                    estado = nuevo;
+                    btn.dataset.estado = nuevo;
+                    btn.classList.toggle('visible', nuevo !== 'oculto');
+                    const textos = {
+                        listo:      'Toca para hablar',
+                        escuchando: 'Te escucho… toca para terminar',
+                        hablando:   primerNombre ? `Habla ${primerNombre} · toca para interrumpir` : 'Toca para interrumpir',
+                        pensando:   'Pensando…',
+                    };
+                    if (textos[nuevo]) texto.textContent = textos[nuevo];
+                }
+
+                function prepararAnalizador() {
+                    const st = window.__micManual.stream;
+                    if (!st) return false;
+                    try {
+                        if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+                        if (ctx.state === 'suspended') ctx.resume();
+                        if (fuente && fuente.__origen === st) return true;
+                        const pista = st.getAudioTracks()[0];
+                        if (!pista || pista.readyState === 'ended') return false;
+                        if (pistaClon) try { pistaClon.stop(); } catch (e) {}
+                        pistaClon = pista.clone();
+                        pistaClon.enabled = true;   // independiente del silencio de D-ID
+                        fuente = ctx.createMediaStreamSource(new MediaStream([pistaClon]));
+                        fuente.__origen = st;
+                        analizador = ctx.createAnalyser();
+                        analizador.fftSize = 1024;
+                        fuente.connect(analizador);
+                        return true;
+                    } catch (e) {
+                        log('sin detector de silencio; se cerrará por respuesta del agente o por tiempo', e);
+                        analizador = null; fuente = null;
+                        return false;
+                    }
+                }
+
+                function medir() {
+                    const ahora = performance.now();
+                    if (analizador) {
+                        const datos = new Float32Array(analizador.fftSize);
+                        analizador.getFloatTimeDomainData(datos);
+                        let suma = 0;
+                        for (let i = 0; i < datos.length; i++) suma += datos[i] * datos[i];
+                        const rms = Math.sqrt(suma / datos.length);
+                        barras.forEach((b, i) => {
+                            const alto = 4 + Math.min(14, rms * 380 * (0.55 + ((i * 3) % 5) / 8));
+                            b.style.height = alto.toFixed(1) + 'px';
+                        });
+                        if (rms > UMBRAL) { huboVoz = true; tUltimaVoz = ahora; }
+                        if (!CIERRE_MANUAL) {
+                            if (huboVoz && ahora - tUltimaVoz > SILENCIO_MS) return terminarEscucha('silencio');
+                            if (!huboVoz && ahora - tInicio > SIN_VOZ_MS) return terminarEscucha('no habló');
+                        }
+                    }
+                    if (ahora - tInicio > MAXIMO_MS) return terminarEscucha('tiempo máximo');
+                }
+
+                function empezarEscucha() {
+                    prepararAnalizador();
+                    silenciar(false);
+                    pintar('escuchando');
+                    tInicio = tUltimaVoz = performance.now();
+                    huboVoz = false;
+                    clearInterval(temporizador);
+                    temporizador = setInterval(medir, 60);
+                }
+
+                function terminarEscucha(motivo) {
+                    clearInterval(temporizador);
+                    temporizador = 0;
+                    barras.forEach(b => { b.style.height = '4px'; });
+                    silenciar(true);
+                    log('micrófono cerrado:', motivo);
+                    if (!conectado) return pintar('oculto');
+                    pintar(actividad === 'TALKING' ? 'hablando'
+                         : (actividad === 'LOADING' || actividad === 'BUFFERING') ? 'pensando'
+                         : 'listo');
+                }
+
+                btn.addEventListener('click', () => {
+                    if (estado === 'escuchando') return terminarEscucha('toque del alumno');
+                    if (estado === 'pensando' || estado === 'oculto') return;
+                    if (estado === 'hablando') {
+                        try { api.functions.interrupt(); } catch (e) {}
+                    }
+                    empezarEscucha();
+                });
+
+                // Si D-ID vuelve a abrir el micrófono (nuevo stream), rehacer el medidor
+                window.__micManual.alNuevoStream.push(() => {
+                    fuente = null; analizador = null;
+                    if (estado === 'escuchando') prepararAnalizador();
+                });
+
+                function conectarEventos() {
+                    api.events.on('connection', ({ state }) => {
+                        const s = String(state || '').toLowerCase();
+                        log('conexión:', s);
+                        if (s === 'connected' && !conectado) {
+                            conectado = true;
+                            silenciar(true);   // arranca callado mientras el avatar saluda
+                            try { api.configure({ showMicToggle: false }); } catch (e) {}
+                            pintar(actividad === 'TALKING' ? 'hablando' : 'listo');
+                            iniciarAnclaje();
+                        }
+                        if (['disconnected', 'disconnecting', 'closed', 'fail'].includes(s)) {
+                            conectado = false;
+                            if (estado === 'escuchando') terminarEscucha('desconexión');
+                            pintar('oculto');
+                        }
+                    });
+
+                    api.events.on('agentActivity', ({ state }) => {
+                        actividad = String(state || '').toUpperCase();
+                        if (!conectado) return;
+                        if (actividad === 'TALKING' || actividad === 'LOADING' || actividad === 'BUFFERING') {
+                            // El agente ya recibió la pregunta o está hablando: micrófono fuera
+                            if (estado === 'escuchando') terminarEscucha('respuesta del agente');
+                            else silenciar(true);
+                            pintar(actividad === 'TALKING' ? 'hablando' : 'pensando');
+                        } else if (actividad === 'IDLE' && estado !== 'escuchando') {
+                            silenciar(true);   // por si D-ID lo reabrió por su cuenta
+                            pintar('listo');
+                        }
+                    });
+                }
+
+                // Esperar la API de D-ID (hasta 30 s); si no aparece, no se toca nada
+                const t0 = Date.now();
+                const espera = setInterval(() => {
+                    const candidato = [window.DID_AGENTS_API, window['did-agent']]
+                        .find(a => a && a.events && a.functions);
+                    if (candidato) {
+                        clearInterval(espera);
+                        api = candidato;
+                        log('API de D-ID lista');
+                        conectarEventos();
+                    } else if (Date.now() - t0 > 30000) {
+                        clearInterval(espera);
+                        log('API de D-ID no disponible: micrófono con el comportamiento original');
+                    }
+                }, 200);
+
+                window.addEventListener('pagehide', () => {
+                    try { if (pistaClon) pistaClon.stop(); } catch (e) {}
+                    try { if (ctx) ctx.close(); } catch (e) {}
+                    try { if (roAnclaje) roAnclaje.disconnect(); } catch (e) {}
+                });
+            }
+
 
             // Failsafe: si tras 12s no detectamos video listo, revelamos.
             setTimeout(() => {
