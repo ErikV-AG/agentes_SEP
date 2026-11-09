@@ -34,7 +34,7 @@
            Interruptor: MIC_MANUAL = false restaura el micrófono original de
            D-ID. Fuera de ?modo=saberes no hace nada, aunque esté en true.
         ================================================================== */
-        window.MIC_MANUAL = true;
+        window.MIC_MANUAL = false;   // false = controles originales de D-ID
 
         (function () {
             const activo = window.MIC_MANUAL === true;
@@ -85,10 +85,31 @@
                     }
                 }`;
 
+            /* Avisos de D-ID que React vuelve a pintar en inglés en cada
+               cuadro mientras el personaje habla: el traductor los cambiaba
+               y el widget los regresaba. Se reemplazan por CSS, que no
+               depende del momento en que se repinta el texto. */
+            const CSS_TEXTOS = `
+                .didagent__hint--interrupt .didagent__hint__text { font-size: 0 !important; }
+                .didagent__hint--interrupt .didagent__hint__text::after {
+                    content: 'Habla para interrumpir';
+                    font-size: 14px;
+                }
+                .didagent__hint:not(.didagent__hint--interrupt) .didagent__hint__text { font-size: 0 !important; }
+                .didagent__hint:not(.didagent__hint--interrupt) .didagent__hint__text::after {
+                    content: 'Espera a que termine la respuesta';
+                    font-size: 14px;
+                }`;
+
             const orig = Element.prototype.attachShadow;
             Element.prototype.attachShadow = function (init) {
                 const opts = Object.assign({}, init, { mode: 'open' });
                 const root = orig.call(this, opts);
+                try {
+                    const tx = document.createElement('style');
+                    tx.textContent = CSS_TEXTOS;
+                    root.appendChild(tx);
+                } catch (e) {}
                 if (RELLENAR_ANCHO) {
                     try {
                         const st = document.createElement('style');
@@ -805,6 +826,10 @@
                 'tools':                         'Herramientas',
                 'ai avatar':                     'Avatar con IA',
                 'ai agent video chat':           'Video chat con el personaje',
+                'voice and face are unavailable. chat still works.':
+                  'La voz y el video no están disponibles. El chat sigue funcionando.',
+                'voice and face animations are temporarily unavailable. you can still use the chat.':
+                  'La voz y el video no están disponibles por el momento. Puedes seguir usando el chat.',
                 'chat call':                     'Conversación por chat',
                 'permission blocked overlay':    'Aviso de permiso bloqueado',
                 'drag to dismiss':               'Arrastra para cerrar',
